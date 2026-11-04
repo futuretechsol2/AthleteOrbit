@@ -1,0 +1,36 @@
+{
+  "name": "athleteorbit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AthleteOrbit: season tracker and AI coach for gymnastics families",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/api.test.js tests/v2.test.js tests/v3.test.js tests/v4.test.js tests/v5.test.js tests/v6.test.js tests/v7.test.js tests/v8.test.js tests/v9.test.js tests/v10.test.js tests/v11.test.js",
+    "setup:stripe": "node scripts/setup-stripe.mjs",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:ios": "npm run cap:sync && npx cap open ios",
+    "cap:android": "npm run cap:sync && npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/app": "^7.0.1",
+    "@supabase/supabase-js": "2.49.4",
+    "qrcode": "1.5.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "stripe": "18.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "7.2.0",
+    "@capacitor/cli": "7.2.0",
+    "@capacitor/core": "7.2.0",
+    "@capacitor/ios": "7.2.0",
+    "@vitejs/plugin-react": "4.4.1",
+    "vite": "6.3.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
