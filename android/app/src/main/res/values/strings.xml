@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AthleteOrbit</string>
+    <string name="title_activity_main">AthleteOrbit</string>
+    <string name="package_name">com.athleteorbit.app</string>
+    <string name="custom_url_scheme">com.athleteorbit.app</string>
+</resources>

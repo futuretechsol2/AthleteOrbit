@@ -1,0 +1,13 @@
+<!-- Supabase > Authentication > Emails > Confirm signup. Subject: Confirm your AthleteOrbit account -->
+<div style="background:#FBF7F2;padding:24px 16px;font-family:Arial,Helvetica,sans-serif;color:#16213E">
+  <div style="max-width:520px;margin:0 auto">
+    <div style="font:700 22px Georgia,serif;margin-bottom:16px">AthleteOrbit</div>
+    <div style="background:#fff;border:1px solid #ECE6DD;border-radius:16px;padding:22px">
+      <h1 style="font:700 20px Georgia,serif;margin:0 0 10px">Welcome{{ if .Data.full_name }}, {{ .Data.full_name }}{{ end }}!</h1>
+      <p style="line-height:1.6;margin:0 0 6px">Tap the button to confirm your email and activate your AthleteOrbit account.</p>
+      {{ if .Data.username }}<p style="line-height:1.6;margin:0 0 16px">Your username is <b>{{ .Data.username }}</b>. You can log in with it or with this email.</p>{{ end }}
+      <p><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#FF6B5B;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:999px">Confirm my account</a></p>
+      <p style="color:#7B8197;font-size:13px;margin-top:16px">Didn't sign up? You can ignore this email.</p>
+    </div>
+  </div>
+</div>
