@@ -1,0 +1,7 @@
+{
+  "appId": "com.athleteorbit.app",
+  "appName": "AthleteOrbit",
+  "webDir": "dist",
+  "ios": { "contentInset": "always" },
+  "android": { "allowMixedContent": false }
+}
