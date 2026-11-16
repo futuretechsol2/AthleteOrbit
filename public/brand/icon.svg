@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1B2550"/><stop offset=".62" stop-color="#3B2A8C"/><stop offset="1" stop-color="#7C3AED"/></linearGradient>
+<linearGradient id="orb" x1="0" x2="1"><stop offset="0" stop-color="#60A5FA"/><stop offset="1" stop-color="#C4B5FD"/></linearGradient></defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<ellipse cx="256" cy="300" rx="200" ry="70" fill="none" stroke="url(#orb)" stroke-width="20" transform="rotate(-14 256 300)" opacity=".55"/>
+<circle cx="282" cy="140" r="30" fill="#FFFFFF"/><polyline points="270,180 250,262" fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/><polyline points="266,196 208,132" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><polyline points="266,196 334,146" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><polyline points="250,262 372,248" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><polyline points="250,262 130,312" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M70 352 A 200 70 -14 0 0 448 264" fill="none" stroke="url(#orb)" stroke-width="20" stroke-linecap="round" transform="rotate(0)"/>
+<path d="M400.0 64.0 L410.6 89.4 L438.0 91.6 L417.1 109.6 L423.5 136.4 L400.0 122.0 L376.5 136.4 L382.9 109.6 L362.0 91.6 L389.4 89.4Z" fill="#F4C95D"/>
+</svg>
