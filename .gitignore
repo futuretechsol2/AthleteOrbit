@@ -7,3 +7,6 @@ ios/App/Pods
 android/.gradle
 android/app/build
 stripe-settings.env
+ios/App/App/public
+android/app/src/main/assets/public
+*.log
