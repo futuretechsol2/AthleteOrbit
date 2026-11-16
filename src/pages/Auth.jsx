@@ -1,0 +1,206 @@
+import ICON_SVG from "../../public/icon.svg?raw";
+import React, { useEffect, useRef, useState } from "react";
+import { db } from "../lib/db.js";
+import { APP } from "../config.js";
+import { Button, Field, ErrorNote } from "../ui.jsx";
+import { ContactSheet } from "./Extras.jsx";
+
+// Password rules: 8+ characters with at least one letter and one number.
+export const EMAIL_OK = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || "").trim());
+export const USERNAME_HELP = "3–20 characters. Use letters (a–z), numbers (0–9) or underscore (_). No spaces, dots, dashes, @ or other symbols.";
+export const PASSWORD_RULES = [["8+ characters", (p) => p.length >= 8], ["a letter", (p) => /[A-Za-z]/.test(p)], ["a number", (p) => /\d/.test(p)], ["72 characters max", (p) => p.length <= 72]];
+export function passwordIssues(pw) {
+  const out = [];
+  if (pw.length > 72) out.push("72 characters or fewer");
+  if (pw.length < 8) out.push("at least 8 characters");
+  if (!/[A-Za-z]/.test(pw)) out.push("a letter");
+  if (!/\d/.test(pw)) out.push("a number");
+  return out;
+}
+function strength(pw) {
+  let s = 0; if (pw.length >= 8) s++; if (pw.length >= 12) s++; if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++; if (/\d/.test(pw)) s++; if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return Math.min(4, s);
+}
+
+function PasswordInput({ value, onChange, autoComplete, id, label = "Password", meter }) {
+  const [show, setShow] = useState(false);
+  const s = strength(value);
+  return (
+    <Field label={label}>
+      <div className="pw">
+        <input id={id} type={show ? "text" : "password"} value={value} onChange={onChange} autoComplete={autoComplete} required />
+        <button type="button" className="pw-toggle" onClick={() => setShow(!show)} aria-label={show ? "Hide password" : "Show password"}>{show ? "Hide" : "Show"}</button>
+      </div>
+      {meter && value && (
+        <span className="pw-meter" aria-live="polite"><span className={`pw-bar s${s}`}><i /></span>{["Too weak", "Weak", "Fair", "Good", "Strong"][s]}</span>
+      )}
+    </Field>
+  );
+}
+
+export function AuthShell({ nav, children }) {
+  return (
+    <div className="auth">
+      <button className="logo-btn" onClick={() => nav("/")} aria-label={`${APP.name} home`}><Logo /></button>
+      {children}
+    </div>
+  );
+}
+
+export function Login({ nav }) {
+  const q = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
+  const [id, setId] = useState(q.get("email") || ""); const [pw, setPw] = useState("");
+  const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [mode, setMode] = useState(q.get("forgot") ? "password" : "login"); const [msg, setMsg] = useState(""); const [contact, setContact] = useState(false);
+  useEffect(() => { setErr(null); setMsg(""); }, [mode]);
+  async function submit(e) {
+    e.preventDefault(); setErr(null); setMsg(""); setBusy(true);
+    try {
+      if (mode === "login") { await db.signIn(id, pw); nav("/", { replace: true }); }
+      else if (mode === "password") { await db.resetPassword(id.trim()); setMsg("If that email has an account, a reset link is on its way."); }
+      else { setMsg(await db.forgotUsername(id.trim())); }
+    } catch (e2) { setErr(e2); }
+    setBusy(false);
+  }
+  return (
+    <AuthShell nav={nav}>
+      <form className="card form" onSubmit={submit}>
+        <h2>{mode === "login" ? "Log in" : mode === "password" ? "Reset your password" : "Find your username"}</h2>
+        {mode === "login" && /kicked=1/.test(location.search) && <div className="note note-warn">You were signed out because your account was opened on another device. AthleteOrbit stays signed in on one device at a time — to let family follow along, use “Share with family” instead.</div>}
+        {mode !== "login" && <p className="muted small">{mode === "password" ? "We'll email you a link to choose a new password." : "We'll email your username to you."}</p>}
+        <Field label={mode === "login" ? "Username or email" : "Email"}>
+          <input id="login-id" value={id} onChange={(e) => setId(e.target.value)} autoComplete={mode === "login" ? "username" : "email"} type={mode === "login" ? "text" : "email"} autoCapitalize="none" required />
+        </Field>
+        {mode === "login" && <PasswordInput id="login-pw" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" />}
+        <ErrorNote error={err} />
+        {mode === "login" && err && /confirm your email/i.test(err.message) && id.trim() && <button type="button" className="link" onClick={async () => { try { await db.resendConfirm(id.trim()); setErr(null); setMsg("We sent a new confirmation link. Tap it and you're in."); } catch (e2) { setErr(e2); } }}>Send me a new confirmation link</button>}
+        {msg && <div className="note note-ok">{msg}</div>}
+        <Button className="wide" disabled={busy}>{busy ? "One moment…" : mode === "login" ? "Log in" : "Send"}</Button>
+        {mode === "login" && <p className="muted small center">Logging in here signs out any other device using this account.</p>}
+        <div className="auth-links">
+          {mode === "login" ? <>
+            <button type="button" className="link" onClick={() => setMode("password")}>Forgot password?</button>
+            <button type="button" className="link" onClick={() => setMode("username")}>Forgot username?</button>
+          </> : <button type="button" className="link" onClick={() => setMode("login")}>Back to log in</button>}
+        </div>
+      </form>
+      <p className="center">New to {APP.name}? <button className="link" onClick={() => nav("/register")}>Create an account</button></p>
+      <p className="center small"><a href="/?demo">▶ Just looking? Try the demo — no sign-up</a></p>
+      <button type="button" className="link center" onClick={() => setContact(true)}>Need help? Contact us</button>
+      {contact && <ContactSheet email={id.includes("@") ? id : ""} onClose={() => setContact(false)} />}
+    </AuthShell>
+  );
+}
+
+export function Register({ nav, initialType = "parent" }) {
+  const [f, setF] = useState({ account_type: initialType, full_name: "", username: "", email: "", password: "", confirm: "", gym_name: "", agree: false });
+  const [u, setU] = useState(null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [sent, setSent] = useState(false); const [bad, setBad] = useState(null); const [touched, setTouched] = useState({}); const [exists, setExists] = useState(false);
+  const timer = useRef();
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  useEffect(() => {
+    clearTimeout(timer.current);
+    const name = f.username.trim().toLowerCase();
+    if (!name) return setU(null);
+    if (name.length < 3) return setU({ valid: false, available: false, message: "Too short — at least 3 characters." });
+    if (/[^a-z0-9_]/.test(name)) return setU({ valid: false, available: false, message: `Not allowed: ${[...new Set(name.replace(/[a-z0-9_]/g, ""))].map((c) => (c === " " ? "space" : `“${c}”`)).join(" ")}. Use letters, numbers or _ only.` });
+    timer.current = setTimeout(() => db.checkUsername(name).then((r) => setU(r && typeof r.available === "boolean" ? r : null)).catch(() => setU(null)), 350);
+    return () => clearTimeout(timer.current);
+  }, [f.username]);
+  const gym = f.account_type === "gym";
+  // Point at the exact field that needs fixing (red outline + focus), with a plain message.
+  const fail = (field, msg) => { setBad(field); setErr(new Error(msg)); setTimeout(() => document.getElementById(`reg-${field}`)?.focus(), 0); };
+  async function submit(e) {
+    e.preventDefault(); setErr(null); setBad(null);
+    const issues = passwordIssues(f.password);
+    if (f.full_name.trim().length < 2) return fail("name", "Enter your full name.");
+    if (gym && f.gym_name.trim().length < 2) return fail("gym", "Enter your gym or club's name.");
+    if (!/^[a-z0-9_]{3,20}$/.test(f.username.trim().toLowerCase())) return fail("username", `Username: ${USERNAME_HELP}`);
+    if (u && u.available === false) return fail("username", u.message || "That username is taken. Pick another.");
+    if (!EMAIL_OK(f.email)) return fail("email", "Enter a valid email address, like name@example.com.");
+    if (issues.length) return fail("pw", `Password needs ${issues.join(", ")}.`);
+    if (f.password !== f.confirm) return fail("pw2", "The two passwords don't match.");
+    if (!f.adult) return fail("adult", "You must be 18 or older to create an account. Athletes under 18 use a parent's account.");
+    if (!f.agree) return fail("agree", "Please agree to the Terms and Privacy Policy.");
+    setBusy(true);
+    try {
+      const r = await db.signUp({ email: f.email.trim(), password: f.password, username: f.username.trim(), full_name: f.full_name.trim(), account_type: f.account_type, gym_name: gym ? f.gym_name.trim() : null });
+      if (r === "signed-in") nav("/", { replace: true }); else setSent(true);
+    } catch (e2) { setExists(!!e2.exists); if (e2.field) fail(e2.field === "password" ? "pw" : e2.field, e2.message); else setErr(e2); }
+    setBusy(false);
+  }
+  const inv = (k) => (bad === k ? { "aria-invalid": true, className: "invalid" } : {});
+  const pwShown = f.password.length > 0;
+  if (sent) return <CheckEmail email={f.email} username={f.username.toLowerCase()} nav={nav} />;
+  return (
+    <AuthShell nav={nav}>
+      <form className="card form" onSubmit={submit} noValidate>
+        <h2>Create your account</h2>
+        <div className="seg" role="radiogroup" aria-label="Account type">
+          <button type="button" role="radio" aria-checked={!gym} className={!gym ? "on" : ""} onClick={() => setF({ ...f, account_type: "parent" })}>I'm a parent</button>
+          <button type="button" role="radio" aria-checked={gym} className={gym ? "on" : ""} onClick={() => setF({ ...f, account_type: "gym" })}>I run a gym</button>
+        </div>
+        <Field label="Your full name"><input id="reg-name" {...inv("name")} value={f.full_name} onChange={set("full_name")} autoComplete="name" maxLength={80} placeholder="Jordan Smith" required /></Field>
+        {gym && <Field label="Gym or club name"><input id="reg-gym" {...inv("gym")} value={f.gym_name} onChange={set("gym_name")} placeholder="Axcelerate Gymnastics" maxLength={80} required /></Field>}
+        <Field label="Username">
+          <input id="reg-username" {...inv("username")} value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.toLowerCase() })} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={20} placeholder="jordan_smith" required />
+          {u ? <span className={`field-hint ${u.available ? "ok-text" : "warn-text"}`} role="status">{u.available ? "✓ Available" : u.message}</span> : null}
+          <span className="field-rule">{USERNAME_HELP} You can log in with your username or email.</span>
+        </Field>
+        <Field label="Email">
+          <input id="reg-email" {...inv("email")} type="email" value={f.email} onChange={set("email")} onBlur={() => setTouched({ ...touched, email: true })} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="name@example.com" required />
+          {touched.email && f.email && !EMAIL_OK(f.email) ? <span className="field-hint warn-text" role="status">That doesn't look like an email address.</span> : null}
+          <span className="field-rule">We send receipts, reminders and password resets here. One login per family. Never shown to other families.</span>
+        </Field>
+        <div className={bad === "pw" ? "invalid-wrap" : ""}><PasswordInput id="reg-pw" value={f.password} onChange={set("password")} autoComplete="new-password" meter /></div>
+        <ul className="pw-checklist" aria-label="Password rules">{PASSWORD_RULES.map(([label, ok]) => { const pass = ok(f.password); return <li key={label} className={pwShown ? (pass ? "ok" : "no") : ""}>{pwShown ? (pass ? "✓" : "✗") : "•"} {label}</li>; })}<li className="note-rule">Spaces and symbols are allowed. Avoid your name or username.</li></ul>
+        <div className={bad === "pw2" ? "invalid-wrap" : ""}><PasswordInput id="reg-pw2" label="Confirm password" value={f.confirm} onChange={set("confirm")} autoComplete="new-password" /></div>
+        {f.confirm && f.confirm !== f.password ? <span className="field-hint warn-text" role="status">Passwords don't match yet.</span> : f.confirm && f.confirm === f.password && !passwordIssues(f.password).length ? <span className="field-hint ok-text">✓ Passwords match</span> : null}
+        <label className={`check small ${bad === "adult" ? "invalid-check" : ""}`}><input id="reg-adult" type="checkbox" checked={!!f.adult} onChange={(e) => setF({ ...f, adult: e.target.checked })} /> <span>I confirm I am <b>18 or older</b>. (Athletes under 18 use their parent's account.)</span></label>
+        <label className={`check small ${bad === "agree" ? "invalid-check" : ""}`}><input id="reg-agree" type="checkbox" checked={f.agree} onChange={set("agree")} /> <span>I agree to the <a href="/terms.html" target="_blank" rel="noreferrer">Terms</a> and <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a>.</span></label>
+        <ErrorNote error={err} />
+        {exists && <div className="row"><a className="btn btn-ghost" href={`/login?email=${encodeURIComponent(f.email.trim())}`}>Log in</a><a className="btn btn-ghost" href={`/login?forgot=1&email=${encodeURIComponent(f.email.trim())}`}>Forgot password?</a></div>}
+        <Button className="wide" disabled={busy}>{busy ? "Creating your account…" : "Create account"}</Button>
+        <p className="muted small center">{gym ? "Next you'll pick your gym plan and get a code for your families." : "Everything free for 7 days. No card needed."}</p>
+      </form>
+      <p className="center">Already have an account? <button className="link" onClick={() => nav("/login")}>Log in</button></p>
+    </AuthShell>
+  );
+}
+
+function CheckEmail({ email, username, nav }) {
+  const [msg, setMsg] = useState(""); const [err, setErr] = useState(null);
+  return (
+    <AuthShell nav={nav}>
+      <div className="card form center">
+        <div className="empty-icon">📬</div>
+        <h2>Check your email</h2>
+        <p>We sent a link to <b>{email}</b>. Tap it and the app opens with you already signed in.</p><p className="muted small">Already had an account with this email? The email has a one-tap sign-in link instead — no new account needed.</p><p className="muted small">Nothing after a minute? Check spam or promotions. Your username is <b>{username}</b>.</p>
+        <ErrorNote error={err} />{msg && <div className="note note-ok">{msg}</div>}
+        <Button kind="ghost" onClick={async () => { setErr(null); try { await db.resendConfirm(email); setMsg("Sent again. Check spam too."); } catch (e) { setErr(e); } }}>Resend the email</Button>
+        <Button onClick={() => nav("/login")}>Go to log in</Button>
+      </div>
+    </AuthShell>
+  );
+}
+
+export function NewPassword({ onDone }) {
+  const [pw, setPw] = useState(""); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
+  return (
+    <div className="auth">
+      <form className="card form" onSubmit={async (e) => { e.preventDefault(); const i = passwordIssues(pw); if (i.length) return setErr(new Error(`Password needs ${i.join(", ")}.`)); setBusy(true); try { await db.updatePassword(pw); onDone(); } catch (e2) { setErr(e2); setBusy(false); } }}>
+        <h2>Choose a new password</h2>
+        <PasswordInput id="new-pw" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" meter />
+        <ErrorNote error={err} />
+        <Button className="wide" disabled={busy}>Save password</Button>
+      </form>
+    </div>
+  );
+}
+
+export function Logo({ small }) {
+  return (
+    <span className={`logo ${small ? "small" : ""}`}>
+      <span className="logo-mark" aria-hidden dangerouslySetInnerHTML={{ __html: ICON_SVG }} />
+      <b><span className="lo-a">Athlete</span><span className="lo-b">Orbit</span></b>
+    </span>
+  );
+}
