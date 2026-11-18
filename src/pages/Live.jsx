@@ -26,6 +26,19 @@ function LiveShell({ nav, meet, children }) {
   );
 }
 
+// Meet data fetched ahead of a tap (hover/touch, or the top results) so a meet opens instantly.
+const MEETS = new Map();
+function getMeet(id, fresh) {
+  const c = MEETS.get(id);
+  if (!fresh && c && Date.now() - c.t < 15000) return c.p;
+  const e = { t: Date.now(), data: c?.data };
+  e.p = api("live/meet", null, "GET", { id }).then((r) => { e.data = r; return r; });
+  e.p.catch(() => { if (MEETS.get(id) === e) MEETS.delete(id); });
+  MEETS.set(id, e); return e.p;
+}
+const prefetchMeet = (id) => { try { getMeet(id).catch(() => {}); } catch {} };
+const cachedMeet = (id) => { const c = MEETS.get(id); return c && c.data && Date.now() - c.t < 60000 ? c.data : null; };
+
 // /live — find a meet
 export function LiveIndex({ nav }) {
   const qs0 = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
@@ -37,6 +50,7 @@ export function LiveIndex({ nav }) {
     const t = setTimeout(() => api("live/list", null, "GET", { q, ...(sport ? { sport } : {}) }).then(setD).catch(setErr), 250); return () => clearTimeout(t);
   }, [q, sport]);
   const list = !d ? null : tab === "live" ? d.meets : d.past || [];
+  useEffect(() => { if (!d) return; const ids = [...(d.athletes || []).flatMap((a) => a.results.slice(0, 2).map((r) => r.meetId)), ...(d.meets || []).slice(0, 3).map((m) => m.id)]; [...new Set(ids)].slice(0, 4).forEach(prefetchMeet); }, [d]);
   return (
     <LiveShell nav={nav}>
       <section className="live-hero"><p className="eyebrow">● Live scores</p><h1>Every score, every sport — live.</h1><p className="lead">Free for everyone. No account, no subscription.</p>
@@ -52,7 +66,7 @@ export function LiveIndex({ nav }) {
             <div key={a.key} className="card live-athlete">
               <div className="la-head"><span className="la-avatar" aria-hidden>{conf(a.sport).icon}</span><span className="grow"><b>{a.name}</b><small className="muted">{[a.gym, a.level, a.sport].filter(Boolean).join(" · ")}</small></span></div>
               {a.results.slice(0, 6).map((r) => (
-                <a key={`${r.meetId}-${r.division}-${r.level}`} className="la-row" href={`/live/${r.meetId}?q=${encodeURIComponent(a.name)}`} onClick={go(nav, `/live/${r.meetId}?q=${encodeURIComponent(a.name)}`)}>
+                <a key={`${r.meetId}-${r.division}-${r.level}`} className="la-row" onPointerEnter={() => prefetchMeet(r.meetId)} onTouchStart={() => prefetchMeet(r.meetId)} onFocus={() => prefetchMeet(r.meetId)} href={`/live/${r.meetId}?q=${encodeURIComponent(a.name)}`} onClick={go(nav, `/live/${r.meetId}?q=${encodeURIComponent(a.name)}`)}>
                   {r.live ? <span className="live-dot live">LIVE</span> : <span className="la-date">{fmt.short ? fmt.short(r.date) : r.date}</span>}
                   <span className="grow"><b>{r.meet}</b><small className="muted">{[r.location, r.level, r.division].filter(Boolean).join(" · ")}</small></span>
                   <span className="la-score">{formatOf(a.sport) === "match" ? `${r.scores?.Home ?? "–"}–${r.scores?.Away ?? "–"}` : fmtScore(r.aa, a.sport)}{r.place ? <small>{ord(r.place)}</small> : null}</span><span aria-hidden>›</span>
@@ -65,7 +79,7 @@ export function LiveIndex({ nav }) {
       {d?.athletes?.length > 0 && list?.length > 0 && <h2 className="live-sec-title">Meets</h2>}
       {!list ? <Spinner label="Loading…" /> : !list.length ? (q && d?.athletes?.length ? null : <Empty icon="🏟️" title={q ? `No athletes or meets match “${q}”` : tab === "live" ? "Nothing live right now" : "No past results yet"} text={tab === "live" ? "Ask your meet or tournament organizer to post scores on AthleteOrbit — it's free for them too." : "Results stay here after each event ends."} />) : (
         <div className="live-list">{list.map((m) => (
-          <a key={m.id} className="card live-meet" href={`/live/${m.id}`} onClick={go(nav, `/live/${m.id}`)}>
+          <a key={m.id} className="card live-meet" onPointerEnter={() => prefetchMeet(m.id)} onTouchStart={() => prefetchMeet(m.id)} onFocus={() => prefetchMeet(m.id)} href={`/live/${m.id}`} onClick={go(nav, `/live/${m.id}`)}>
             <span className={`live-dot ${m.live_status}`}>{m.live_status === "live" ? "LIVE" : m.live_status === "final" || m.past ? "FINAL" : m.now ? "TODAY" : "SOON"}</span>
             <span className="grow"><b>{m.name}</b><small className="muted">{conf(m.sport).icon} {m.sport} · {fmt.date(m.start_date)}{m.location ? ` · ${m.location}` : ""}</small></span><span aria-hidden>›</span>
           </a>
@@ -78,10 +92,10 @@ export function LiveIndex({ nav }) {
 
 // /live/:id — one meet, free for everyone
 export function LivePage({ id, nav, session }) {
-  const [d, setD] = useState(null); const [err, setErr] = useState(null); const [q, setQ] = useState(() => { try { return new URLSearchParams(location.search).get("q") || ""; } catch { return ""; } }); const [sess, setSess] = useState(""); const [lvl, setLvl] = useState(""); const [onlyMine, setOnlyMine] = useState(false);
+  const [d, setD] = useState(() => cachedMeet(id)); const [err, setErr] = useState(null); const [q, setQ] = useState(() => { try { return new URLSearchParams(location.search).get("q") || ""; } catch { return ""; } }); const [sess, setSess] = useState(""); const [lvl, setLvl] = useState(""); const [onlyMine, setOnlyMine] = useState(false);
   const [report, setReport] = useState(false); const [card, setCard] = useState(null); const [msg, setMsg] = useState("");
-  const load = () => api("live/meet", null, "GET", { id }).then(setD).catch(setErr);
-  useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, [id, session?.user?.id]);
+  const load = (fresh = true) => getMeet(id, fresh).then(setD).catch(setErr);
+  useEffect(() => { load(false); const t = setInterval(load, 20000); return () => clearInterval(t); }, [id, session?.user?.id]);
   if (err && !d) return <LiveShell nav={nav}><div className="card"><ErrorNote error={err} /><a href="/live" onClick={go(nav, "/live")}>Find another meet ›</a></div></LiveShell>;
   if (!d) return <LiveShell nav={nav}><Spinner label="Loading live scores…" /></LiveShell>;
   const m = d.meet, sport = m.sport || "Gymnastics", L = labelsFor(sport), isMatch = formatOf(sport) === "match";

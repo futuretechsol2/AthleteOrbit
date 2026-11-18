@@ -34,6 +34,43 @@ function HeroDemo() {
     </div>
   );
 }
+// 3D showcase: three phones floating in an orbit, each playing a short real screen recording.
+const ORBIT = [
+  ["schedule", "Season from one photo", "Only Maya’s meets kept ✓"],
+  ["live", "Live scores", "● LIVE  Maya P. 35.305"],
+  ["coach", "Coach G", "Meet-day food plan ready"],
+];
+function Orbit3D() {
+  const ref = React.useRef(null); const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Load and play the clips only while the section is on screen — the page itself stays light.
+    const io = new IntersectionObserver(([e]) => { setOn(e.isIntersecting); el.querySelectorAll("video").forEach((v) => { if (e.isIntersecting && !v.poster) v.poster = v.dataset.poster; if (e.isIntersecting && !still) { if (!v.src) v.src = v.dataset.src + (v.canPlayType('video/mp4; codecs="avc1.42E01E"') ? ".mp4" : ".webm"); v.play().catch(() => {}); } else v.pause(); }); }, { rootMargin: "300px" });
+    io.observe(el);
+    let raf = 0;
+    const move = (e) => { if (still) return; const r = el.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { el.style.setProperty("--rx", `${(-y * 10).toFixed(2)}deg`); el.style.setProperty("--ry", `${(x * 16).toFixed(2)}deg`); }); };
+    const leave = () => { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); };
+    el.addEventListener("pointermove", move); el.addEventListener("pointerleave", leave);
+    return () => { io.disconnect(); el.removeEventListener("pointermove", move); el.removeEventListener("pointerleave", leave); cancelAnimationFrame(raf); };
+  }, []);
+  return (
+    <section className={`l-orbit ${on ? "on" : ""}`} ref={ref} aria-label="AthleteOrbit on a phone">
+      <div className="o-copy"><p className="eyebrow">● Real app, real screens</p><h2>Your athlete's whole season, in orbit.</h2><p>Schedule, live scores and an AI coach — one app the whole family checks.</p></div>
+      <div className="o-stage">
+        <i className="o-ring r1" aria-hidden /><i className="o-ring r2" aria-hidden /><i className="o-glow" aria-hidden />
+        {ORBIT.map(([k, t, chip], n) => (
+          <figure key={k} className={`o-phone p${n}`}>
+            <div className="o-screen"><video muted loop playsInline preload="none" data-poster={`/videos/orbit-${k}.jpg`} data-src={`/videos/orbit-${k}`} aria-label={`${t} screen recording`} /></div>
+            <figcaption className="o-chip">{chip}</figcaption>
+            <span className="o-label">{t}</span>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const STEPS = [
   ["📷", "Snap the schedule", "Take a picture of the season schedule your gym hands out — paper, email or a screenshot."],
   ["🎯", "See only your athlete's meets", "We read every competition and keep the ones for your child's level and girls/boys team. Siblings each get their own."],
@@ -94,6 +131,8 @@ export default function Landing({ nav }) {
         </div>
         <HeroDemo />
       </section>
+
+      <Orbit3D />
 
       <section className="l-section l-live">
         <div className="l-live-card">

@@ -39,6 +39,11 @@ export function fetchWithTimeout(url, opts = {}, ms = 20000) {
   return fetch(url, { ...opts, signal: ctl.signal }).catch((e) => { if (e.name === "AbortError") throw Object.assign(new Error("This is taking too long. Check your connection and try again."), { status: 408, timeout: true }); throw e; }).finally(() => clearTimeout(t));
 }
 export const supabase = DEMO ? null : createClient(URL_, KEY, { auth: { persistSession: true, autoRefreshToken: true, lock: tabLock }, global: { fetch: (u, o) => fetchWithTimeout(u, o) } });
+// Short-lived read cache (see db.list). Writes call changed(table); listeners (alerts) refresh on change.
+const CACHE = new Map(), INFLIGHT = new Map(), CACHE_MS = 60000, CHANGE = new Set();
+function changed(table) { for (const k of [...CACHE.keys()]) if (k.startsWith(`${table}|`)) CACHE.delete(k); CHANGE.forEach((f) => { try { f(table); } catch {} }); }
+export function onDataChange(f) { CHANGE.add(f); return () => CHANGE.delete(f); }
+export function clearCache() { CACHE.clear(); }
 // The signed-in session, kept in memory so each request doesn't have to ask Supabase for it again.
 let SESSION = null;
 const fresh = (s) => !!s?.access_token && (!s.expires_at || s.expires_at * 1000 > Date.now() + 60000);
@@ -224,7 +229,7 @@ export const db = {
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: APP_URL }); if (error) throw error;
   },
   async updatePassword(password) { if (DEMO) return; const { error } = await supabase.auth.updateUser({ password }); if (error) throw error; },
-  async signOut() { if (DEMO) { localStorage.removeItem(LS); try { sessionStorage.removeItem("ao-demo"); } catch {} location.href = "/"; return; } SESSION = null; await supabase.auth.signOut(); },
+  async signOut() { if (DEMO) { localStorage.removeItem(LS); try { sessionStorage.removeItem("ao-demo"); } catch {} location.href = "/"; return; } SESSION = null; CACHE.clear(); await supabase.auth.signOut(); },
   async token() { if (DEMO) return "demo"; try { return (await currentSession())?.access_token; } catch { return null; } },
 
   async profile() {
@@ -243,6 +248,22 @@ export const db = {
   },
 
   async list(table, filter = {}) {
+    if (!DEMO) {
+      // Speed: answer from what we loaded in the last minute (exact query, or the family-wide list filtered here),
+      // and share one request when two screens ask for the same thing at once. Any write clears that table.
+      const key = `${table}|${JSON.stringify(filter)}`, now = Date.now();
+      const hit = CACHE.get(key);
+      if (hit && now - hit.at < CACHE_MS) return hit.data.slice();
+      const all = Object.keys(filter).length && CACHE.get(`${table}|{}`);
+      if (all && now - all.at < CACHE_MS) return all.data.filter((r) => Object.entries(filter).every(([k, v]) => r[k] === v));
+      if (INFLIGHT.has(key)) return (await INFLIGHT.get(key)).slice();
+      const p = db._list(table, filter).then((data) => { CACHE.set(key, { at: Date.now(), data }); return data; }).finally(() => INFLIGHT.delete(key));
+      INFLIGHT.set(key, p);
+      return (await p).slice();
+    }
+    return db._list(table, filter);
+  },
+  async _list(table, filter = {}) {
     const [col, asc] = ORDER[table] || ["created_at", true];
     if (DEMO) {
       let rows = DEMO_GYM && table === "gymnasts" ? [] : demoData()[table] || [];
@@ -264,12 +285,14 @@ export const db = {
       d[table].push(r); save(d); return r;
     }
     const { data, error } = await supabase.from(table).insert(row).select().single();
+    changed(table);
     if (error) throw friendly(error);
     return data;
   },
   async update(table, id, patch) {
     if (DEMO) { const d = demoData(); const r = d[table].find((x) => x.id === id); Object.assign(r, patch); save(d); return r; }
     const { data, error } = await supabase.from(table).update(patch).eq("id", id).select().single();
+    changed(table);
     if (error) throw friendly(error);
     return data;
   },
@@ -280,6 +303,8 @@ export const db = {
       save(d); return;
     }
     const { error } = await supabase.from(table).delete().eq("id", id);
+    changed(table);
+    if (table === "gymnasts") CACHE.clear();
     if (error) throw friendly(error);
   },
   async setSkill(gymnast_id, skill_key, status) {
@@ -289,6 +314,7 @@ export const db = {
       save(d); return;
     }
     const { error } = await supabase.from("skill_status").upsert({ gymnast_id, skill_key, status, updated_at: new Date().toISOString() }, { onConflict: "gymnast_id,skill_key" });
+    changed("skill_status");
     if (error) throw friendly(error);
   },
 };
@@ -336,6 +362,7 @@ export async function api(path, body, method = "POST", query = null) {
   const token = await db.token();
   const qs = query ? `?${new URLSearchParams(Object.entries(query).filter(([, v]) => v != null)).toString()}` : "";
   const slow = ["ai/", "club/schedule-read", "club/lookup", "scores/online", "photos/order"].some((x) => path.startsWith(x));
+  if (method !== "GET") { CACHE.clear(); setTimeout(() => CHANGE.forEach((f) => { try { f("*"); } catch {} }), 0); } // server may change data
   const r = await fetchWithTimeout(`${API_BASE}/api/${path}${qs}`, {
     method, headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: method === "GET" ? undefined : JSON.stringify(body || {}),

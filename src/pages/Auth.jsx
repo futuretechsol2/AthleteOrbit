@@ -56,7 +56,7 @@ export function Login({ nav }) {
     e.preventDefault(); setErr(null); setMsg(""); setBusy(true);
     try {
       if (mode === "login") { await db.signIn(id, pw); nav("/", { replace: true }); }
-      else if (mode === "password") { await db.resetPassword(id.trim()); setMsg("If that email has an account, a reset link is on its way."); }
+      else if (mode === "password") { await db.resetPassword(id.trim()); setMsg("If that email or username has an account, a reset link is on its way. Check your inbox (and spam) in a minute."); }
       else { setMsg(await db.forgotUsername(id.trim())); }
     } catch (e2) { setErr(e2); }
     setBusy(false);
@@ -66,9 +66,9 @@ export function Login({ nav }) {
       <form className="card form" onSubmit={submit}>
         <h2>{mode === "login" ? "Log in" : mode === "password" ? "Reset your password" : "Find your username"}</h2>
         {mode === "login" && /kicked=1/.test(location.search) && <div className="note note-warn">You were signed out because your account was opened on another device. AthleteOrbit stays signed in on one device at a time — to let family follow along, use “Share with family” instead.</div>}
-        {mode !== "login" && <p className="muted small">{mode === "password" ? "We'll email you a link to choose a new password." : "We'll email your username to you."}</p>}
-        <Field label={mode === "login" ? "Username or email" : "Email"}>
-          <input id="login-id" value={id} onChange={(e) => setId(e.target.value)} autoComplete={mode === "login" ? "username" : "email"} type={mode === "login" ? "text" : "email"} autoCapitalize="none" required />
+        {mode !== "login" && <p className="muted small">{mode === "password" ? "Enter your email or username — we'll email you a link to choose a new password." : "We'll email your username to you."}</p>}
+        <Field label={mode === "username" ? "Email" : "Username or email"}>
+          <input id="login-id" value={id} onChange={(e) => setId(e.target.value)} autoComplete={mode === "username" ? "email" : "username"} type={mode === "username" ? "email" : "text"} autoCapitalize="none" spellCheck={false} required />
         </Field>
         {mode === "login" && <PasswordInput id="login-pw" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" />}
         <ErrorNote error={err} />

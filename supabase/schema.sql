@@ -832,3 +832,8 @@ end $$;
 create extension if not exists pg_trgm;
 create index if not exists live_scores_name_trgm on public.live_scores using gin (name gin_trgm_ops);
 create index if not exists live_scores_gym_trgm on public.live_scores using gin (gym gin_trgm_ops);
+
+-- ---------- v17.2: families can hide an athlete from public name search ----------
+alter table public.gymnasts add column if not exists hide_search boolean not null default false;
+alter table public.gymnasts add column if not exists search_name text check (search_name is null or char_length(search_name) <= 60);
+create index if not exists gymnasts_hide_search on public.gymnasts(hide_search) where hide_search;

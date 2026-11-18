@@ -189,3 +189,23 @@ test("sign-up with an email that never confirmed: confirmation email is sent aga
   assert.ok(!T._confirmed, "not auto-confirmed");
   delete process.env.SENDGRID_API_KEY;
 });
+
+test("signing up again before confirming: the NEW password and username are the ones that work after confirming", async () => {
+  const { register } = await import("../server/routes/auth/email.js");
+  delete process.env.EMAIL_CONFIRM;
+  Object.assign(process.env, { SENDGRID_API_KEY: "sg", EMAIL_FROM: "support@athleteorbit.org" });
+  deps.fetch = async () => ({ ok: true, status: 202, text: async () => "" });
+  T.profiles.push({ id: "old-unconf", email: "again@x.com", username: "first_try", _unconfirmed: true });
+  // same username as before is allowed (it's their own); new password typed today
+  const r = await call(register, { body: { email: "again@x.com", password: "NewPass2026", username: "first_try", full_name: "Again Parent", adult: true } });
+  assert.deepEqual(r.json, { sent: true }, JSON.stringify(r.json));
+  assert.equal(T._passwords["old-unconf"], "NewPass2026", "today's password is set on the account");
+  // a different new username is applied too
+  await call(register, { body: { email: "again@x.com", password: "NewPass2027", username: "second_try", full_name: "Again Parent", adult: true } });
+  assert.equal(T.profiles.find((p) => p.id === "old-unconf").username, "second_try"); assert.equal(T._passwords["old-unconf"], "NewPass2027");
+  // but a CONFIRMED account's password is never changed by the sign-up form
+  T.profiles.push({ id: "conf1", email: "real@x.com", username: "realuser" });
+  await call(register, { body: { email: "real@x.com", password: "Hijack2026", username: "hijacker", full_name: "X", adult: true } });
+  assert.ok(!T._passwords?.conf1, "confirmed account untouched"); assert.equal(T.profiles.find((p) => p.id === "conf1").username, "realuser");
+  delete process.env.SENDGRID_API_KEY;
+});

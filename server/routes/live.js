@@ -65,6 +65,25 @@ export const list = handler(["GET"], async (req) => {
   return { meets: live, past, athletes, sports: [...new Set((data || []).map((l) => l.sport || "Gymnastics"))] };
 });
 
+// Search privacy: families can hide an athlete from public name search (More → their athlete → Hide from search).
+const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+async function hiddenAthletes(sb) {
+  try { const { data, error } = await sb.from("gymnasts").select("name,search_name,club").eq("hide_search", true).limit(5000); return error ? [] : (data || []).map((g) => ({ name: norm(g.search_name || g.name), club: norm(g.club) })); } catch { return []; }
+}
+export function isHidden(r, hidden) {
+  if (!hidden.length) return false;
+  const n = norm(r.name), gym = norm(r.gym);
+  return hidden.some((h) => {
+    if (!h.name) return false;
+    const a = h.name.split(" "), b = n.split(" ");
+    const same = n === h.name || (a[0] === b[0] && (a.length < 2 || b.length < 2 || a[a.length - 1][0] === b[b.length - 1][0]));
+    if (!same) return false;
+    // Full name typed (first + last): enough on its own. First name only: also needs the gym to match.
+    if (a.length >= 2 && b.length >= 2 && (n === h.name || !h.club || !gym || gym.includes(h.club) || h.club.includes(gym))) return true;
+    return !!h.club && !!gym && (gym.includes(h.club) || h.club.includes(gym));
+  });
+}
+
 // Athlete search (like MeetScoresOnline): type a name — optionally with gym, level, meet or city — and get every
 // meet with official scores for that athlete. Parent-reported scores stay private to the family and team.
 async function findAthletes(words, listings, today) {
@@ -76,7 +95,9 @@ async function findAthletes(words, listings, today) {
   const looks = await Promise.all([...words.slice(0, 3).map((w) => sb.from("live_scores").select("*").in("listing_id", ids).eq("source", "official").ilike("name", `%${w}%`).limit(300)),
     sb.from("live_scores").select("*").in("listing_id", ids).eq("source", "official").ilike("gym", `%${key}%`).limit(300)]);
   const seen = new Set(), groups = {};
+  const hidden = await hiddenAthletes(sb);
   for (const r of looks.flatMap((x) => x.data || [])) {
+    if (isHidden(r, hidden)) continue;
     if (seen.has(r.id)) continue; seen.add(r.id);
     const l = byId[r.listing_id]; if (!l) continue;
     const hay = `${r.name} ${r.gym || ""} ${r.level || ""} ${r.division || ""} ${l.name} ${l.location || ""} ${l.host || ""}`.toLowerCase();

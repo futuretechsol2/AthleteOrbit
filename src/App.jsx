@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { db, api, DEMO, rememberSource } from "./lib/db.js";
+import { db, api, onDataChange, DEMO, rememberSource } from "./lib/db.js";
 import { APP } from "./config.js";
 import { Button, Field, Sheet, ErrorNote, Spinner, Avatar } from "./ui.jsx";
 import Home from "./pages/Home.jsx";
@@ -230,13 +230,25 @@ function Main({ session, nav }) {
   useEffect(() => {
     if (current === "family" && CHILD_PAGES.includes(page.name) && gymnasts?.length) setCurrent(gymnasts.find((g) => g.id === lastChild)?.id || gymnasts[0].id);
   }, [page.name, gymnasts]);
+  // Alerts: work them out on start, when data changes, when the app comes back to the screen and every 5 minutes —
+  // NOT on every tab tap (that used to fire 7+ extra database requests per tap and made tabs feel slow).
+  const [alertTick, setAlertTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setAlertTick((n) => n + 1);
+    const off = onDataChange(bump); const t = setInterval(bump, 300000);
+    const vis = () => { if (document.visibilityState === "visible") bump(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { off(); clearInterval(t); document.removeEventListener("visibilitychange", vis); };
+  }, []);
   useEffect(() => {
     if (!gymnasts?.length) return;
     let live = true;
-    loadFamily().then((f) => live && setAlerts(buildAlerts(f, me))).catch(() => {});
-    return () => { live = false; };
-  }, [page, gymnasts, me]);
+    const t = setTimeout(() => loadFamily().then((f) => live && setAlerts(buildAlerts(f, me))).catch(() => {}), 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [alertTick, gymnasts, me]);
   useEffect(() => { window.scrollTo(0, 0); }, [page.name]);
+  // Warm the cache for the tabs people open next, so Scores / Meets appear instantly.
+  useEffect(() => { if (!gymnasts?.length) return; const t = setTimeout(() => { db.list("scores").catch(() => {}); db.list("meets").catch(() => {}); }, 800); return () => clearTimeout(t); }, [gymnasts?.length]);
   // A plan picked on the pricing page opens checkout once the family is set up.
   useEffect(() => {
     if (!me || !gymnasts?.length || profile?.account_type === "gym") return;
@@ -339,7 +351,7 @@ function Main({ session, nav }) {
         </Sheet>
       )}
       <main className="content">
-        {needsKid ? <AddFirstKid S={S} sport={sport} canAdd={!gymnasts.length || paid} openPaywall={openPaywall} onSaved={(rec) => { if (rec?.id) setCurrent(rec.id); refresh(); }} />
+        {needsKid ? <AddFirstKid key={page.name} page={page.name} S={S} sport={sport} canAdd={!gymnasts.length || paid} openPaywall={openPaywall} onSaved={(rec) => { if (rec?.id) setCurrent(rec.id); refresh(); }} />
           : <P key={`${page.name}-${familyMode ? "family" : gymnast?.id}-${sport}`} {...props} />}
       </main>
       {false && <button className="fab" onClick={() => (can("coach") ? go("coach") : upgrade("coach"))}><span aria-hidden>✦</span> Ask Coach</button>}
@@ -425,13 +437,24 @@ function FirstKidChooser({ sport, onSaved }) {
     : <FindAthleteFirst onManual={() => setManual(true)} onLinked={() => onSaved(null)} />;
 }
 
-function AddFirstKid({ S, sport, canAdd, openPaywall, onSaved }) {
+// Each tab explains what it will show, so tapping Meets / Scores / Coach before adding an athlete doesn't look
+// like "nothing happened" (it used to show the same Home screen on every tab).
+function AddFirstKid({ S, sport, canAdd, openPaywall, onSaved, page = "home" }) {
+  const athlete = S.everyday ? "child" : "athlete";
+  const T = {
+    meets: [`🗓 ${S.events}`, `Your ${S.events.toLowerCase()} calendar`, `Every ${S.event.toLowerCase()} with date, place and session time — snap your gym's season schedule or add them one by one. Reminders 14, 7, 2 and 1 days before.`],
+    scores: [`★ ${S.results}`, `Track every ${S.results.toLowerCase().replace(/s$/, "")}`, `Log ${S.results.toLowerCase()} after each ${S.event.toLowerCase()} — see personal bests, trends and qualifying marks at a glance.`],
+    skills: ["✓ Skills", `Skills by ${S.level.toLowerCase()}`, `Check off skills as your ${athlete} learns them and see what's next for their ${S.level.toLowerCase()}.`],
+    coach: ["✦ Coach G", "Your AI coach", `Ask anything about your ${athlete} — training, nerves, meet-day food plans and weekly tips, written for them.`],
+  }[page];
+  const [eyebrow, title, sub] = T || [`${S.icon} ${sport}`, `Add your ${sport.toLowerCase()} ${athlete}`, `Then log ${S.results.toLowerCase()}, follow skills by ${S.level.toLowerCase()}, plan ${S.events.toLowerCase()} and ask the AI coach.`];
   return (
     <div className="stack">
       <section className="hero hero-light">
-        <p className="eyebrow">{S.icon} {sport}</p>
-        <h1>Add your {sport.toLowerCase()} athlete</h1>
-        <p className="hero-sub">Then log {S.results.toLowerCase()}, follow skills by {S.level.toLowerCase()}, plan {S.events.toLowerCase()} and ask the AI coach.</p>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        <p className="hero-sub">{sub}</p>
+        {T && <p className="first-step">Step 1 — add your {sport.toLowerCase()} {athlete} below. It takes 30 seconds.</p>}
       </section>
       {canAdd ? <FirstKidChooser sport={sport} onSaved={onSaved} />
         : <div className="card"><p>Your plan isn't active. Choose a plan to add athletes.</p><Button className="wide" onClick={openPaywall}>Choose a plan</Button></div>}

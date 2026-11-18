@@ -32,8 +32,9 @@ export const register = handler(["POST"], async (req) => {
   limit(req, "register", 40);           // a whole team signing up on the gym's Wi-Fi shares one IP
   limit(req, `register|${email}`, 5);
   const sb = deps.supabase();
-  const { data: taken } = await sb.from("profiles").select("id").eq("username", username).maybeSingle();
-  if (taken) throw new HttpError(409, "That username is taken. Please pick another.");
+  const { data: taken } = await sb.from("profiles").select("id,email").eq("username", username).maybeSingle();
+  // Their own earlier (unconfirmed) sign-up holding this username doesn't count as "taken".
+  if (taken && String(taken.email || "").toLowerCase() !== email) throw new HttpError(409, "That username is taken. Please pick another.");
   const gym = b.account_type === "gym";
   const data = { username, full_name, account_type: gym ? "gym" : "parent", gym_name: gym ? String(b.gym_name || "").trim().slice(0, 80) || null : null, terms_accepted_at: deps.now().toISOString(),
     ...(b.ref ? { ref: String(b.ref).slice(0, 12) } : {}), ...(b.source ? { source: String(b.source).slice(0, 120) } : {}) };
@@ -50,6 +51,9 @@ export const register = handler(["POST"], async (req) => {
       // Made earlier but the confirmation email never arrived: finish it now so the password they set works.
       if (!mustConfirm() && link?.user?.id && !link.user.email_confirmed_at) { await sb.auth.admin.updateUserById(link.user.id, { email_confirm: true }).catch(() => {}); return { exists: true }; }
       const unconfirmed = !!link?.user && !link.user.email_confirmed_at;
+      // Signing up again before ever confirming: the details typed NOW win (password, username, name). Otherwise the
+      // confirm link signs them in but their new password "doesn't work" later — the old one from the first try does.
+      if (unconfirmed) await adoptDetails(sb, link.user.id, password, data);
       // Never confirmed (an earlier sign-up whose email didn't arrive): send the confirmation email again.
       if (link?.properties?.hashed_token && emailEnabled()) await sendEmail({ to: email, subject: unconfirmed ? "Confirm your email to start AthleteOrbit" : "You already have an AthleteOrbit account", html: emailLayout({ title: unconfirmed ? "Confirm your email" : "Welcome back!",
         body: unconfirmed ? `<p>Tap the button to confirm your email. You'll be signed in right away.</p>${button(linkFor(link.properties, "magiclink"), "Confirm my email")}`
@@ -59,6 +63,8 @@ export const register = handler(["POST"], async (req) => {
     if (/USERNAME_TAKEN|Database error/i.test(error.message)) throw new HttpError(409, "That username was just taken. Please pick another.");
     throw new HttpError(400, error.message);
   }
+  // If the email already existed unconfirmed, Supabase may hand back that user unchanged — apply today's details.
+  if (out?.user?.id && !out.user.email_confirmed_at) await adoptDetails(sb, out.user.id, password, data);
   if (!mustConfirm()) {
     const id = out?.user?.id;
     const { error: ce } = id ? await sb.auth.admin.updateUserById(id, { email_confirm: true }) : { error: new Error("no user") };
@@ -83,6 +89,13 @@ export const register = handler(["POST"], async (req) => {
 });
 
 // Always answers the same way, so nobody can test which emails have accounts.
+async function adoptDetails(sb, id, password, data) {
+  const { error } = await sb.auth.admin.updateUserById(id, { password, user_metadata: data });
+  if (error) console.error("adoptDetails", error.message);
+  const patch = { username: data.username, full_name: data.full_name, account_type: data.account_type, gym_name: data.gym_name };
+  const { error: pe } = await sb.from("profiles").update(patch).eq("id", id);
+  if (pe) { delete patch.username; await sb.from("profiles").update(patch).eq("id", id); } // username clash: keep the old one
+}
 // People forget whether they used a username or an email — accept either.
 async function emailFrom(v) {
   const x = v.trim().toLowerCase();

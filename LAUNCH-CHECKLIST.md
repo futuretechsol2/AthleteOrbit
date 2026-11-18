@@ -1,3 +1,12 @@
+## v17.2 upgrade (1 minute)
+Supabase → SQL Editor → paste and Run:
+```sql
+alter table public.gymnasts add column if not exists hide_search boolean not null default false;
+alter table public.gymnasts add column if not exists search_name text check (search_name is null or char_length(search_name) <= 60);
+create index if not exists gymnasts_hide_search on public.gymnasts(hide_search) where hide_search;
+```
+Then open https://athleteorbit.org/api/health and check "schemaUpToDate": true.
+
 # AthleteOrbit — your launch checklist
 
 About 2½ hours in total, spread over 2–3 sittings. Do them in order. Everything else is already built.
