@@ -4,6 +4,7 @@ Supabase → SQL Editor → paste and Run:
 alter table public.gymnasts add column if not exists hide_search boolean not null default false;
 alter table public.gymnasts add column if not exists search_name text check (search_name is null or char_length(search_name) <= 60);
 create index if not exists gymnasts_hide_search on public.gymnasts(hide_search) where hide_search;
+alter table public.gymnasts add column if not exists last_name text check (last_name is null or char_length(last_name) <= 40);
 ```
 Then open https://athleteorbit.org/api/health and check "schemaUpToDate": true.
 

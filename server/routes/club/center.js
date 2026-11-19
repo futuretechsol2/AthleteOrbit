@@ -110,8 +110,9 @@ export const rosterSearch = handler(["GET"], async (req) => {
 async function claim(sb, club, userId, r) {
   const { data: kids } = await sb.from("gymnasts").select("*").eq("user_id", userId);
   if ((kids || []).some((g) => g.roster_id === r.id)) return false;
-  const first = r.name.trim().split(/\s+/)[0];
-  const rec = { level: r.level || "Team", program: r.sport === "Gymnastics" ? r.program || "WAG" : "Other", sport: r.sport || "Gymnastics", gender: r.gender, club: club.name, roster_id: r.id };
+  const [first, ...rest] = r.name.trim().split(/\s+/);
+  const last = rest.join(" ") || null;
+  const rec = { last_name: last, level: r.level || "Team", program: r.sport === "Gymnastics" ? r.program || "WAG" : "Other", sport: r.sport || "Gymnastics", gender: r.gender, club: club.name, roster_id: r.id };
   const same = (kids || []).find((g) => !g.roster_id && g.name.trim().toLowerCase() === first.toLowerCase());
   if (same) await sb.from("gymnasts").update(rec).eq("id", same.id).eq("user_id", userId);
   else {

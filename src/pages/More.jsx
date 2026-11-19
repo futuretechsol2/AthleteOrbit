@@ -149,7 +149,7 @@ export function GymnastForm({ row, onClose, onSaved, canDelete = true, title, sp
   const [f, setF] = useState(() => {
     const program = row.program && row.program !== "Other" ? row.program : "WAG";
     const levels = levelsFor(initSport, program);
-    return { name: row.name || "", sport: initSport, program, level: row.level || (initSport === "Gymnastics" ? "Level 3" : levels[0]) || "", club: row.club || "", photo: row.photo || null,
+    return { name: row.name || "", last_name: row.last_name || "", sport: initSport, program, level: row.level || (initSport === "Gymnastics" ? "Level 3" : levels[0]) || "", club: row.club || "", photo: row.photo || null,
       gender: row.gender || "", coach_name: row.coach_name || "", coach_phone: row.coach_phone || "", coach_email: row.coach_email || "",
       hide_search: !!row.hide_search, search_name: row.search_name || "" };
   });
@@ -166,16 +166,19 @@ export function GymnastForm({ row, onClose, onSaved, canDelete = true, title, sp
   };
   async function save(e) {
     e.preventDefault(); setBusy(true); setErr(null);
-    const rec = { name: f.name.trim(), program: gym ? f.program : "Other", sport: f.sport, level: f.level.trim() || levels[0] || "Team", club: f.club.trim() || null, photo: f.photo || null, gender: gym ? (f.program === "MAG" ? "M" : "F") : f.gender || null,
+    const rec = { name: f.name.trim(), last_name: f.last_name.trim() || null, program: gym ? f.program : "Other", sport: f.sport, level: f.level.trim() || levels[0] || "Team", club: f.club.trim() || null, photo: f.photo || null, gender: gym ? (f.program === "MAG" ? "M" : "F") : f.gender || null,
       coach_name: f.coach_name.trim() || null, coach_phone: f.coach_phone.trim() || null, coach_email: f.coach_email.trim() || null };
     // Search privacy: only sent when used, so families on an older database aren't affected.
-    if (f.hide_search || row.hide_search) { rec.hide_search = !!f.hide_search; rec.search_name = f.hide_search ? (f.search_name.trim() || f.name.trim()) : null; }
+    if (f.hide_search || row.hide_search) { rec.hide_search = !!f.hide_search; rec.search_name = f.hide_search ? (f.search_name.trim() || `${f.name} ${f.last_name}`.trim()) : null; }
     try { const saved = row.id ? await db.update("gymnasts", row.id, rec) : await db.insert("gymnasts", rec); onSaved(saved || rec); } catch (e2) { setErr(e2); setBusy(false); }
   }
   const body = (
     <form className="form" onSubmit={save}>
       <PhotoPicker value={f.photo} name={f.name} onChange={(photo) => setF({ ...f, photo })} />
-      <Field label="First name"><input value={f.name} onChange={set("name")} maxLength={60} required autoFocus={!row.id} /></Field>
+      <div className="grid2">
+        <Field label="First name"><input value={f.name} onChange={set("name")} maxLength={40} required autoFocus={!row.id} autoComplete="off" /></Field>
+        <Field label="Last name"><input value={f.last_name} onChange={set("last_name")} maxLength={40} required autoComplete="off" /></Field>
+      </div>
       <Field label="Sport"><select value={f.sport} onChange={set("sport")}>{SPORT_NAMES.map((x) => <option key={x} value={x}>{SPORTS[x].icon} {x}</option>)}</select></Field>
       <div className="grid2">
         {gym && <Field label="Program"><select value={f.program} onChange={set("program")}>{PROGRAMS.filter((p) => p !== "Other").map((p) => <option key={p} value={p}>{PROGRAM_LABEL[p]}</option>)}</select></Field>}
@@ -194,7 +197,7 @@ export function GymnastForm({ row, onClose, onSaved, canDelete = true, title, sp
         </div>
       </details>
       <div className="privacy-box">
-        <label className="check"><input type="checkbox" checked={f.hide_search} onChange={(e) => setF({ ...f, hide_search: e.target.checked, search_name: f.search_name || f.name })} /> <span><b>Hide {f.name.trim() || "my athlete"} from public athlete search</b><br /><span className="muted small">Other people can't find them by typing their name on Live scores. Your family still sees everything.</span></span></label>
+        <label className="check"><input type="checkbox" checked={f.hide_search} onChange={(e) => setF({ ...f, hide_search: e.target.checked, search_name: f.search_name || `${f.name} ${f.last_name}`.trim() })} /> <span><b>Hide {f.name.trim() || "my athlete"} from public athlete search</b><br /><span className="muted small">Other people can't find them by typing their name on Live scores. Your family still sees everything.</span></span></label>
         {f.hide_search && <Field label="Name as it appears on score sheets" hint="For example “Maya Patel” or “Maya P.”"><input value={f.search_name} onChange={set("search_name")} maxLength={60} placeholder={f.name} /></Field>}
         {f.hide_search && <p className="muted small">Official results that a meet organizer posts still appear on that meet's scoreboard, like a printed results sheet.</p>}
       </div>

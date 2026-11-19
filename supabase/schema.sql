@@ -837,3 +837,6 @@ create index if not exists live_scores_gym_trgm on public.live_scores using gin 
 alter table public.gymnasts add column if not exists hide_search boolean not null default false;
 alter table public.gymnasts add column if not exists search_name text check (search_name is null or char_length(search_name) <= 60);
 create index if not exists gymnasts_hide_search on public.gymnasts(hide_search) where hide_search;
+
+-- ---------- v17.3: athlete last name ----------
+alter table public.gymnasts add column if not exists last_name text check (last_name is null or char_length(last_name) <= 40);

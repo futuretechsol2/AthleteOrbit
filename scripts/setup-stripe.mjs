@@ -14,7 +14,7 @@ import { TIERS, PLANS, TERMS } from "../src/data/plans.js";
 
 const MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, yearly: 12 };
 const recurring = (term) => (term === "yearly" ? { interval: "year", interval_count: 1 } : { interval: "month", interval_count: MONTHS[term] });
-export const WEBHOOK_EVENTS = ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "checkout.session.completed"];
+export const WEBHOOK_EVENTS = ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "checkout.session.completed", "invoice.paid"];
 
 async function product(stripe, id, name, description) {
   try { const p = await stripe.products.retrieve(id); if (p.active === false) await stripe.products.update(id, { active: true }); return p; }

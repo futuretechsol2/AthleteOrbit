@@ -1,6 +1,6 @@
 import { handler, readRaw, deps, env, HttpError, sendEmail, emailLayout, esc } from "../../lib.js";
 import crypto from "node:crypto";
-import { termFromRecurring, PLANS, TIER_ORDER, TIERS } from "../../../src/data/plans.js";
+import { termFromRecurring, PLANS, TIER_ORDER, TIERS, termLabel } from "../../../src/data/plans.js";
 import { tierFromPrice } from "./checkout.js";
 import { fulfillTickets } from "../tickets/index.js";
 import { fulfillPrints } from "../photos.js";
@@ -19,6 +19,13 @@ export default handler(["POST"], async (req) => {
     throw new HttpError(400, "Invalid signature");
   }
   const sb = deps.supabase();
+  const out = await processEvent(sb, event);
+  // Payment emails (after the order is fulfilled): the family gets a confirmation, support@ gets a copy. Never blocks.
+  await paymentEmails(sb, event).catch((e) => console.error("payment email", e.message));
+  return out;
+});
+
+async function processEvent(sb, event) {
   if (event.type === "checkout.session.completed" && event.data.object?.metadata?.kind === "athlete_page") {
     if (event.data.object.payment_status === "paid") await fulfillAthletePage(event.data.object);
     return { received: true };
@@ -57,7 +64,7 @@ export default handler(["POST"], async (req) => {
     if (status === "active") await rewardReferrer(sb, userId, sub.customer).catch((e) => console.error("referral reward failed", e.message));
   }
   return { received: true };
-});
+}
 
 function mapStatus(s) {
   if (s === "active" || s === "trialing") return s;
@@ -112,4 +119,53 @@ export async function rewardReferrer(sb, userId, customer) {
   }
   if (ref.email) await sendEmail({ to: ref.email, subject: "You earned a free month of AthleteOrbit 🎉", html: emailLayout({ title: "Thanks for spreading the word!", body: "<p>A family you invited just joined AthleteOrbit, so your next month is on us. Keep sharing your invite link under <b>More &gt; Invite a family</b>.</p>" }) }).catch(() => {});
   return true;
+}
+
+// ---------- Payment confirmation emails ----------
+const supportInbox = () => process.env.SUPPORT_INBOX_EMAIL || "support@athleteorbit.org";
+const usd = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
+const day = (sec) => new Date(sec * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" });
+const KIND_NAMES = { tickets: "Meet tickets", prints: "Photo prints", live_pro: "Live Scoring Pro", athlete_page: "Recruiting page" };
+
+function planName(meta = {}) {
+  if (meta.kind === "club") return `AthleteOrbit for Gyms (${termLabel(meta.plan || "monthly")})`;
+  const t = TIERS[meta.tier]; return `AthleteOrbit ${t ? t.name : "plan"}${meta.plan ? ` (${termLabel(meta.plan)})` : ""}`;
+}
+
+export async function paymentEmails(sb, event) {
+  const o = event.data.object || {};
+  if (event.type === "checkout.session.completed") {
+    const meta = { ...(o.metadata || {}) };
+    const email = o.customer_details?.email || o.customer_email;
+    if (o.mode === "subscription") {
+      // Subscription details (tier/plan) live on the subscription; the session carries the user id.
+      let sub = null; try { if (o.subscription) sub = await deps.stripe().subscriptions.retrieve(o.subscription); } catch {}
+      Object.assign(meta, sub?.metadata || {});
+      const name = planName(meta), paid = o.payment_status === "paid" && o.amount_total > 0;
+      const trialEnd = sub?.trial_end;
+      const amount = paid ? usd(o.amount_total) : usd(sub?.items?.data?.[0]?.price?.unit_amount);
+      if (email) await sendEmail({ to: email, subject: paid ? `Payment received: ${name}` : `You're subscribed: ${name}`, html: emailLayout({ title: paid ? "Thank you, your payment went through" : "You're all set",
+        body: `<p><b>${esc(name)}</b> is now active on your account.</p>${paid ? `<p>Amount paid: <b>${amount}</b></p>` : `<p>Your free trial continues${trialEnd ? ` until <b>${day(trialEnd)}</b>` : ""}. Your first payment of <b>${amount}</b> is taken${trialEnd ? " then" : " at the end of the trial"}, and we'll email you a confirmation.</p>`}
+<p>Manage or cancel any time in the app under <b>More &gt; Account &gt; Manage plan</b>.</p><p style="font-size:13px;color:#7B8197">Questions? Just reply to this email.</p>` }) });
+      await sendEmail({ to: supportInbox(), replyTo: email || undefined, subject: `${paid ? "💰 New payment" : "🆕 New subscriber (trial)"}: ${name}${paid ? ` ${amount}` : ""} · ${email || "unknown email"}`, html: emailLayout({ title: paid ? "New payment" : "New subscriber",
+        body: `<p><b>${esc(email || "unknown")}</b> subscribed to <b>${esc(name)}</b>.</p><p>${paid ? `Paid now: <b>${amount}</b>` : `First charge ${amount}${trialEnd ? ` on ${day(trialEnd)}` : " when the trial ends"}`}</p><p>Stripe customer: ${esc(o.customer || "")}</p>` }) });
+      return;
+    }
+    if (o.payment_status !== "paid") return;
+    const what = KIND_NAMES[meta.kind] || "Purchase", amount = usd(o.amount_total);
+    // Tickets and prints already send their own confirmation with the details; the others get a receipt here.
+    if (email && ["live_pro", "athlete_page"].includes(meta.kind)) await sendEmail({ to: email, subject: `Payment received: ${what}`, html: emailLayout({ title: "Thank you, your payment went through", body: `<p><b>${esc(what)}</b>: <b>${amount}</b></p><p style="font-size:13px;color:#7B8197">Questions? Just reply to this email.</p>` }) });
+    await sendEmail({ to: supportInbox(), replyTo: email || undefined, subject: `💰 New payment: ${what} ${amount} · ${email || "unknown email"}`, html: emailLayout({ title: "New payment", body: `<p><b>${esc(email || "unknown")}</b> paid <b>${amount}</b> for <b>${esc(what)}</b>.</p>` }) });
+    return;
+  }
+  // Renewals and the first charge after a trial. (The very first charge without a trial was confirmed at checkout.)
+  if (event.type === "invoice.paid" && o.amount_paid > 0 && o.billing_reason !== "subscription_create") {
+    const meta = o.subscription_details?.metadata || o.parent?.subscription_details?.metadata || {};
+    let email = o.customer_email;
+    if (!email && o.customer) { const { data: p } = await sb.from("profiles").select("email").eq("stripe_customer_id", o.customer).maybeSingle(); email = p?.email; }
+    const name = planName(meta), amount = usd(o.amount_paid);
+    if (email) await sendEmail({ to: email, subject: `Payment received: ${name}`, html: emailLayout({ title: "Thank you, your payment went through",
+      body: `<p><b>${esc(name)}</b>: <b>${amount}</b></p>${o.hosted_invoice_url ? `<p><a href="${esc(o.hosted_invoice_url)}" style="color:#6D28D9;font-weight:bold">View your receipt</a></p>` : ""}<p>Manage or cancel any time in the app under <b>More &gt; Account &gt; Manage plan</b>.</p>` }) });
+    await sendEmail({ to: supportInbox(), replyTo: email || undefined, subject: `💰 ${o.billing_reason === "subscription_cycle" ? "Renewal" : "Payment"}: ${name} ${amount} · ${email || "unknown email"}`, html: emailLayout({ title: "Payment received", body: `<p><b>${esc(email || "unknown")}</b> paid <b>${amount}</b> for <b>${esc(name)}</b>.</p>` }) });
+  }
 }
