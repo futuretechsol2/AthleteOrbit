@@ -31,7 +31,8 @@ export default handler(["GET"], async () => {
       const h = await sb.from("gymnasts").select("hide_search,search_name,last_name").limit(1);
       const i = await sb.from("meet_rsvps").select("id").limit(1);
       const j = await sb.from("club_meets").select("fee_cents,fee_due").limit(1);
-      checks.schemaUpToDate = !b.error && !c.error && !d.error && !e.error && !f.error && !g.error && !h.error && !i.error && !j.error;
+      const k = await sb.from("floor_music").select("id").limit(1);
+      checks.schemaUpToDate = !b.error && !c.error && !d.error && !e.error && !f.error && !g.error && !h.error && !i.error && !j.error && !k.error;
       if (!checks.schemaUpToDate) checks.schemaFix = "Supabase → SQL Editor → paste supabase/schema.sql → Run";
       const st = await sb.storage.from("photos").createSignedUrls(["health-check.jpg"], 60).catch(() => ({ error: true }));
       checks.photoStorage = !(st?.error && /bucket/i.test(String(st.error.message || st.error)));

@@ -1,3 +1,4 @@
+import { GymMusic } from "./Music.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api, DEMO } from "../lib/db.js";
@@ -8,7 +9,7 @@ import { Button, Field, Sheet, Empty, ErrorNote, Spinner, fmt } from "../ui.jsx"
 import { openExternal } from "./More.jsx";
 import { SchedulePhoto, CompEdit, Thread, safeUrl } from "./Center.jsx";
 
-const TABS = [["home", "Overview", "⌂"], ["roster", "Roster", "👥"], ["schedule", "Schedule", "🗓"], ["messages", "Messages", "💬"], ["posts", "Announce", "📣"]];
+const TABS = [["home", "Overview", "⌂"], ["roster", "Roster", "👥"], ["schedule", "Schedule", "🗓"], ["music", "Music", "🎵"], ["messages", "Messages", "💬"], ["posts", "Announce", "📣"]];
 
 // Home for gym-owner accounts: roster, season schedule, messages and announcements for every family.
 export default function GymOwner({ profile, me, go, refresh, params }) {
@@ -33,6 +34,7 @@ export default function GymOwner({ profile, me, go, refresh, params }) {
           {tab === "home" && <Overview club={club} setTab={setTab} daysLeft={daysLeft} profile={profile} />}
           {tab === "roster" && <Roster club={club} />}
           {tab === "schedule" && <Schedule me={me} />}
+          {tab === "music" && <GymMusic />}
           {tab === "messages" && <Inbox onRead={refresh} />}
           {tab === "posts" && <Announcements club={club} />}
         </>

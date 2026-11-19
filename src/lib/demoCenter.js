@@ -150,6 +150,48 @@ export function demoCenter(path, body, d, save, uid, gymRole) {
   return null;
 }
 // Extra fields for the demo "me" answer.
+// Floor Music demo: a few real (generated, royalty-free) tracks so the music table actually plays.
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+const DEMO_TRACKS = ["/demo-music/floor-1.mp3", "/demo-music/floor-2.mp3", "/demo-music/floor-3.mp3"];
+const OTHER_GYM = [["Ava Ruiz", "Level 4", "Queen City Flyers"], ["Lily Kim", "Level 4", "Carolina Elite"], ["Ella Chen", "Level 3", "Tidal Gym"], ["Nora Diaz", "Level 5", "Queen City Flyers"]];
+export function demoMusic(path, body, d, save) {
+  const c = center(d), b = body || {};
+  const girls = c.roster.filter((r) => r.gender !== "M" && r.program !== "MAG");
+  c.music ||= { levels: { "Level 4": { id: "m-l4", title: "Level 4 team floor 2026-27", duration: 43, url: DEMO_TRACKS[1] }, "Level 5": { id: "m-l5", title: "Level 5 team floor 2026-27", duration: 41, url: DEMO_TRACKS[0] } }, athletes: {} };
+  const lk = (l) => String(l || "").toLowerCase();
+  const pick = (r) => c.music.athletes[r.id] || Object.entries(c.music.levels).find(([l]) => lk(l) === lk(r.level))?.[1] || null;
+  if (path === "music/upload-url") return { path: `demo/${uid()}.mp3`, token: "demo" };
+  if (path === "music") {
+    if (b.gymnast || b.gymnast_id) {
+      const g = (d.gymnasts || []).find((x) => x.id === (b.gymnast || b.gymnast_id));
+      if (!g || g.program === "MAG" || g.gender === "M") return { eligible: false, music: null };
+      d.ownMusic ||= {};
+      if (b.path) { d.ownMusic[g.id] = { id: uid(), title: b.title || "Floor music", duration: b.duration, url: b.preview || DEMO_TRACKS[2], scope: "athlete" }; save(d); return { saved: true }; }
+      if (b.remove) { delete d.ownMusic[g.id]; save(d); return { removed: true }; }
+      const own = d.ownMusic[g.id]; const gym = !own && { id: "m-l5", title: "Level 5 team floor 2026-27", duration: 41, url: DEMO_TRACKS[0], scope: "level" };
+      return { eligible: true, music: own || gym, from: own ? "family" : "Demo Gymnastics", gym: "Demo Gymnastics" };
+    }
+    if (b.remove) { for (const k of Object.keys(c.music.levels)) if (c.music.levels[k].id === b.remove) delete c.music.levels[k]; for (const k of Object.keys(c.music.athletes)) if (c.music.athletes[k].id === b.remove) delete c.music.athletes[k]; save(d); return { removed: true }; }
+    if (b.path) {
+      const m = { id: uid(), title: b.title || "Floor music", duration: b.duration || null, url: b.preview || DEMO_TRACKS[2] };
+      if (b.roster_id) { c.music.athletes[b.roster_id] = { ...m, scope: "athlete" }; save(d); return { saved: true, athletes: 1 }; }
+      c.music.levels[b.level] = { ...m, scope: "level" }; save(d); return { saved: true, athletes: girls.filter((r) => lk(r.level) === lk(b.level) && !c.music.athletes[r.id]).length };
+    }
+    const levels = [...new Set(girls.map((r) => r.level || "No level"))].sort((a, b2) => a.localeCompare(b2, undefined, { numeric: true }))
+      .map((level) => ({ level, girls: girls.filter((r) => (r.level || "No level") === level).length, music: c.music.levels[level] ? { ...c.music.levels[level], scope: "level" } : null }));
+    const athletes = girls.map((r) => { const m = pick(r); return { roster_id: r.id, name: r.name, level: r.level, music: m && { ...m, scope: c.music.athletes[r.id] ? "athlete" : "level" } }; });
+    return { club: { name: DEMO_CLUB.name }, levels, athletes, desk_url: `${location.origin}/music/gym-demo?k=demo&demo`, counts: { girls: girls.length, ready: athletes.filter((a) => a.music).length } };
+  }
+  if (path === "music/desk") { // uploaded demo files live only until the page closes
+    for (const m of [...Object.values(c.music.levels), ...Object.values(c.music.athletes)]) if (String(m.url).startsWith("blob:")) m.url = DEMO_TRACKS[2];
+    const mine = girls.map((r) => ({ id: r.id, name: r.name, level: r.level, gym: DEMO_CLUB.name, music: pick(r) }));
+    const others = String(b.id || "").startsWith("gym-") ? [] : OTHER_GYM.map(([name, level, gym], i) => ({ id: `o${i}`, name, level, gym, music: i === 3 ? null : { id: `o${i}`, title: `${name.split(" ")[0]} — floor`, duration: 40, url: DEMO_TRACKS[(i + 2) % 3], scope: "athlete" } }));
+    const athletes = [...mine, ...others].sort((a, b2) => (a.level || "").localeCompare(b2.level || "", undefined, { numeric: true }) || a.name.localeCompare(b2.name));
+    return { title: String(b.id || "").startsWith("gym-") ? `${DEMO_CLUB.name} · Floor music` : "Holiday Flip Invitational", gyms: [DEMO_CLUB.name, "Queen City Flyers", "Carolina Elite", "Tidal Gym"], notOnApp: [], athletes, counts: { athletes: athletes.length, ready: athletes.filter((a) => a.music).length } };
+  }
+  return null;
+}
+
 export function demoMeExtras(d, gymRole) {
   const c = center(d);
   return { unread_messages: gymRole ? Object.values(c.unreadGym).reduce((a, n) => a + n, 0) : c.joined ? c.unreadFamily : 0, owns_club: gymRole ? DEMO_CLUB : null, web_lookup: true,

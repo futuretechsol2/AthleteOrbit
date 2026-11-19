@@ -859,3 +859,28 @@ create table if not exists public.meet_rsvps (
 create index if not exists meet_rsvps_meet on public.meet_rsvps(club_meet_id);
 alter table public.meet_rsvps enable row level security;
 -- Families and gyms reach sign-ups only through the server (service role); no direct client access.
+
+-- ---------- v19: Floor Music — gyms upload floor music per level or per athlete; meets play it with one tap ----------
+create table if not exists public.floor_music (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid references public.clubs(id) on delete cascade,              -- gym music (level-wide, or one athlete via roster_id)
+  roster_id uuid references public.club_roster(id) on delete cascade,
+  level text check (level is null or char_length(level) <= 40),
+  gymnast_id uuid references public.gymnasts(id) on delete cascade,       -- a family's own upload (gym not on AthleteOrbit)
+  path text not null unique, title text not null default 'Floor music' check (char_length(title) <= 120),
+  duration_sec int check (duration_sec is null or duration_sec between 1 and 600),
+  uploaded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (club_id is not null or gymnast_id is not null)
+);
+create index if not exists floor_music_club on public.floor_music(club_id);
+create unique index if not exists floor_music_roster on public.floor_music(roster_id) where roster_id is not null;
+create unique index if not exists floor_music_gymnast on public.floor_music(gymnast_id) where gymnast_id is not null;
+alter table public.floor_music enable row level security;      -- server only (signed links)
+do $$ begin
+  if exists (select 1 from information_schema.schemata where schema_name = 'storage') then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+      values ('music', 'music', false, 20971520, array['audio/mpeg','audio/mp3','audio/mp4','audio/x-m4a','audio/aac','audio/wav','audio/x-wav','audio/wave'])
+      on conflict (id) do nothing;
+  end if;
+end $$;

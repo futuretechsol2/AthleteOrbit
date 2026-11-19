@@ -277,7 +277,7 @@ export const organizer = handler(["GET", "POST"], async (req) => {
     const os = (orders || []).filter((o) => o.listing_id === l.id && o.status === "paid"), ts = (tix || []).filter((t) => t.listing_id === l.id);
     return { ...pick(l), live_enabled: !!l.live_enabled, live_status: l.live_status || "off", live_pro: !!l.live_pro, organizer_name: l.organizer_name, organizer_email: l.organizer_email, club_codes: l.club_codes, payouts: !!l.stripe_account, updates: l.updates || [],
       sold: ts.length, checkedIn: ts.filter((t) => t.used_at).length, orders: os.length, gross_cents: os.reduce((a, o) => a + o.tickets_cents, 0),
-      public_url: `${appUrl()}/tickets/${l.id}`, door_url: DOOR(l), score_url: SCORER(l), live_url: `${appUrl()}/live/${l.id}`,
+      public_url: `${appUrl()}/tickets/${l.id}`, door_url: DOOR(l), score_url: SCORER(l), music_url: `${appUrl()}/music/${l.id}?k=${signToken(`music:${l.id}`)}`, live_url: `${appUrl()}/live/${l.id}`,
       share_url: sellsTicketsNow(l) ? `${appUrl()}/tickets/${l.id}` : `${appUrl()}/live/${l.id}`, attending_gyms: l.attending_gyms || [] };
   }) };
 });

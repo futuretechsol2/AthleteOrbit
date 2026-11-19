@@ -366,6 +366,8 @@ export function Events() {
             <button className="chip" onClick={() => copy(l.door_url, "Door scanner link for volunteers")}>Copy door link</button>
             <button className="chip live-chip" onClick={() => setLive(l)}>● Live scores</button>
             <button className="chip" onClick={() => copy(l.score_url, "Scorer link (no account needed) ")}>✍️ Copy scorer link</button>
+            {l.music_url && (l.sport || "Gymnastics") === "Gymnastics" && <a className="chip" href={l.music_url} target="_blank" rel="noreferrer">🎵 Floor music table</a>}
+            {l.music_url && (l.sport || "Gymnastics") === "Gymnastics" && <button className="chip" onClick={() => copy(l.music_url, "Music table link (no account needed) ")}>Copy music link</button>}
             <button className="chip" onClick={() => setPeople(l)}>Who's coming</button>
             {l.status === "on_sale" && <button className="chip" onClick={() => setPost(l)}>📣 Live update</button>}
           </div>

@@ -1,6 +1,6 @@
 // Data layer. Uses Supabase when configured; otherwise a local demo store so the app
 // can be tried instantly (demo data stays on this device only).
-import { demoCenter, demoMeExtras } from "./demoCenter.js";
+import { demoCenter, demoMeExtras, demoMusic } from "./demoCenter.js";
 import { demoLive } from "./demoLive.js";
 import { createClient } from "@supabase/supabase-js";
 
@@ -342,6 +342,15 @@ export async function uploadPhotos(items, onProgress) {
   }
   return { saved };
 }
+// Floor music: straight from the device to private storage, then attached to a level / athlete by the caller.
+export async function uploadMusic(file) {
+  if (file.size > 20 * 1024 * 1024) throw new Error("That file is over 20 MB. Export it as an MP3 and try again.");
+  if (DEMO) return { path: `demo/${uid()}.mp3`, preview: URL.createObjectURL(file) };
+  const u = await api("music/upload-url", { type: file.type, name: file.name, size: file.size });
+  const { error } = await supabase.storage.from("music").uploadToSignedUrl(u.path, u.token, file, { contentType: file.type || "audio/mpeg" });
+  if (error) throw new Error("The music didn't upload. Check your connection and try again.");
+  return { path: u.path };
+}
 export async function uploadCard(blob) {
   if (DEMO) return { path: "demo/cards/card.jpg" };
   const { uploads: [u] } = await api("photos/upload-url", { kind: "card" });
@@ -404,13 +413,14 @@ async function demoApi(path, body) {
   if (path === "club/roster-requests") return body?.id ? { approved: true } : { requests: [{ id: "rq1", athlete: "Ruby Stone", level: "Level 4", parent: "Kate Stone", email: "kate@example.com", created_at: new Date().toISOString() }] };
   if (path === "tickets/organizer") { const d = demoData(); d.events = d.events || [{ id: "ev1", name: "Queen City Classic 2027", start_date: "2027-01-23", end_date: "2027-01-24", location: "Charlotte, NC", status: "on_sale", payouts: true, sold: 214, checkedIn: 0, orders: 96, gross_cents: 287400, sessions: ["Session 1 · Sat 8:00 AM", "Session 2 · Sat 1:00 PM"], ticket_types: [{ id: "adult", name: "Adult day pass", price: 15 }, { id: "child", name: "Child (6-12)", price: 8 }], updates: [], public_url: location.origin + "/tickets/demo-listing", door_url: location.origin + "/door/demo-listing?k=demo" }];
     if (body?.name) { if (body.id) Object.assign(d.events.find((e) => e.id === body.id) || {}, body); else d.events.unshift({ ...body, id: uid(), payouts: false, sold: 0, checkedIn: 0, orders: 0, gross_cents: 0, updates: [], status: body.status === "on_sale" ? "draft" : body.status, public_url: location.origin + "/tickets/demo-listing", door_url: location.origin + "/door/demo-listing?k=demo" }); save(d); return { id: "x" }; }
-    save(d); return { listings: d.events.map((e) => ({ attending_gyms: ["Queen City Flyers", "Carolina Elite"], ...e, live_url: location.origin + "/live/demo-listing", score_url: location.origin + "/score/demo-listing?k=demo", share_url: location.origin + (e.status === "on_sale" ? "/tickets/demo-listing" : "/live/demo-listing") })) }; }
+    save(d); return { listings: d.events.map((e) => ({ attending_gyms: ["Queen City Flyers", "Carolina Elite"], ...e, live_url: location.origin + "/live/demo-listing", score_url: location.origin + "/score/demo-listing?k=demo", music_url: location.origin + "/music/demo-listing?k=demo&demo", share_url: location.origin + (e.status === "on_sale" ? "/tickets/demo-listing" : "/live/demo-listing") })) }; }
   if (path === "tickets/organizer-connect") return { ready: true };
   if (path === "tickets/organizer-notify") return { notified: 38 };
   if (path === "gyms/search") { const q = String(body?.q || "").toLowerCase(); if (body?.web) return { online: q.length < 3 ? [] : [{ name: `${body.q.replace(/\b\w/g, (x) => x.toUpperCase())} Gymnastics Academy`, city: "Charlotte, NC" }] }; return { gyms: [["Demo Gymnastics", "DEMO-1A2B3C"], ["Queen City Flyers", "QUEENC-7K2M9P"], ["Carolina Elite", "CAROLI-4H8T2W"], ["Tidal Gym", "TIDALG-3J6N1Q"]].filter(([n, c]) => q.length > 1 && (n.toLowerCase().includes(q) || c.toLowerCase() === q)).map(([name, code]) => ({ name, code })) }; }
   if (path === "meet/rsvp") { const d = demoData(); const m = d.meets.find((x) => x.id === body?.meet); if (!m?.club_meet_id) return { rsvp: null }; d.rsvp ||= {}; if (body.status) { d.rsvp[m.id] = body.status; save(d); } return { rsvp: { gym: "Demo Gymnastics", status: d.rsvp[m.id] || null, paid: false, fee_cents: 9500, fee_due: m.start_date } }; }
   if (path === "tickets/attendees") return { attendees: [["Dan Patel", "dan@example.com", 3, 0], ["Jen Brooks", "jen@example.com", 2, 0], ["Carlos Ortiz", "carlos@example.com", 4, 0]].map(([name, email, tickets, checkedIn]) => ({ name, email, tickets, checkedIn, types: "Adult day pass, Child (6-12)", session: "Session 1 · Sat 8:00 AM" })) };
   if (path === "tickets/update") { const d = demoData(); const e = (d.events || []).find((x) => x.id === body.id); if (e) { e.updates = [{ text: body.text, at: new Date().toISOString() }, ...(e.updates || [])]; save(d); } return { posted: true, emailed: 96 }; }
+  if (path === "music" || path.startsWith("music/")) { const out = demoMusic(path, body, demoData(), save); if (out) return out; }
   if (path.startsWith("club/") && path !== "club/checkout") { const out = demoCenter(path, body, demoData(), save, uid, DEMO_GYM); if (out) return out; }
   if (path === "ai/coach") return { reply: "**Demo mode:** in the live app, Coach G answers here using your child's real results, skills and coach notes for their sport.\n\nQuick tip: beam scores usually jump fastest by fixing *small* things first — pointed feet, holding each position a full second, and sticking the dismount. Ask the coach which of those matters most right now." };
   if (path === "ai/scoresheet" && body?.sport && body.sport !== "Gymnastics") return { event_name: "Demo Fall Splash", event_date: new Date().toISOString().slice(0, 10), results: body.sport === "Swimming" ? [{ metric: "50 Free", value: 34.88, unit: "sec", place: 3 }, { metric: "50 Back", value: 41.5, unit: "sec", place: 5 }] : [{ metric: "Routine score", value: 92.4, unit: "pts", place: 2 }, { metric: "Deductions", value: 0.5, unit: "pts" }], confidence: "medium", notes: "Demo mode: sample results, not read from your photo." };

@@ -900,3 +900,42 @@ input.invalid, .invalid-wrap input { border-color: #DC2626 !important; box-shado
 .signup-row select { flex: 1 1 auto; max-width: 220px; }
 .signup-row .check { margin: 0; white-space: nowrap; }
 .signup-row:last-child { border-bottom: 0; }
+/* v19: Floor music */
+.pill-warn { background: var(--warn-bg); color: var(--warn); }
+.play-sm { width: 40px; height: 40px; border-radius: 50%; background: var(--coral); color: #fff; display: inline-grid; place-items: center; font-size: 15px; flex: none; }
+.music-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.music-row > .grow { flex: 1 1 180px; }
+.music-athlete { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.music-athlete:last-child { border-bottom: 0; }
+.music-athlete > .grow { flex: 1 1 170px; }
+.music-search { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.music-card .music-icon { font-size: 26px; }
+.section-title { margin: 8px 0 0; font-size: 17px; }
+/* the meet music table: built for a folding table, a laptop or a tablet, in a loud gym */
+.music-desk { min-height: 100vh; background: #0F1530; color: #fff; padding: 16px 16px 230px; max-width: 900px; margin: 0 auto; }
+.music-desk .muted, .music-desk small { color: #AEB4CF; }
+.desk-head h1 { font-family: var(--display); margin: 4px 0; font-size: 26px; }
+.desk-head .eyebrow { color: var(--gold); }
+.desk-tools { position: sticky; top: 0; background: #0F1530; padding: 8px 0; z-index: 2; }
+.music-search.big { font-size: 18px; padding: 14px 16px; background: #1A2247; border-color: #2B356A; color: #fff; }
+.music-desk .chip { background: #1A2247; color: #fff; border-color: #2B356A; }
+.music-desk .chip.on { background: var(--gold); color: #16213E; }
+.desk-row { display: flex; align-items: stretch; gap: 8px; margin: 8px 0; }
+.desk-pick { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; background: #1A2247; border: 2px solid transparent; color: #fff; }
+.desk-row.on .desk-pick { border-color: var(--gold); }
+.desk-pick b { font-size: 18px; }
+.desk-pick small.warn { color: #FFB38A; }
+.desk-play { width: 64px; border-radius: 14px; background: #22C55E; color: #08240F; font-size: 26px; display: grid; place-items: center; flex: none; }
+.desk-player { position: fixed; left: 0; right: 0; bottom: 0; background: #161E42; border-top: 1px solid #2B356A; padding: 12px 16px calc(14px + var(--safe-b)); z-index: 5; }
+.desk-player > * { max-width: 868px; margin-left: auto; margin-right: auto; }
+.desk-player.playing { background: #123524; border-top-color: #22C55E; }
+.dp-who b { font-size: 22px; display: block; }
+.dp-bar { height: 8px; background: #2B356A; border-radius: 4px; overflow: hidden; margin: 10px auto 4px; }
+.dp-bar span { display: block; height: 100%; background: var(--gold); transition: width .25s linear; }
+.dp-time { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; font-size: 14px; color: #AEB4CF; }
+.dp-ctl { display: flex; justify-content: center; align-items: center; gap: 18px; margin-top: 6px; }
+.dp-main { width: 84px; height: 84px; border-radius: 50%; background: #22C55E; color: #08240F; font-size: 36px; display: grid; place-items: center; }
+.desk-player.playing .dp-main { background: var(--gold); color: #16213E; }
+.dp-btn { width: 56px; height: 56px; border-radius: 50%; background: #2B356A; color: #fff; font-size: 22px; display: grid; place-items: center; }
+.dp-hint { display: block; text-align: center; margin-top: 6px; }
+.music-desk .link { color: var(--gold); }

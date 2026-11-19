@@ -1,3 +1,4 @@
+import { AthleteMusic } from "./Music.jsx";
 import React, { useEffect, useState } from "react";
 import { db } from "../lib/db.js";
 import { allAround, eventsCompeted } from "../data/skills.js";
@@ -87,6 +88,7 @@ export default function Home({ gymnast, go, can, upgrade }) {
         </section>
       )}
 
+      {gym && <AthleteMusic gymnast={gymnast} />}
       <CoachCard gymnast={gymnast} S={S} next={next} go={go} can={can} upgrade={upgrade} />
 
       <GettingStarted gymnast={gymnast} d={d} gym={gym} S={S} go={go} can={can} openShare={() => (can("share") ? setShare(true) : upgrade("share"))} />

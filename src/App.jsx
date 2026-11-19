@@ -18,6 +18,7 @@ import Photos from "./pages/Photos.jsx";
 import AthleteView, { athleteViewState } from "./pages/AthleteView.jsx";
 import { About, Contact, Tour, Faq } from "./pages/Info.jsx";
 import { LiveIndex, LivePage, LiveTv, ScorerPage } from "./pages/Live.jsx";
+import { MusicDesk } from "./pages/Music.jsx";
 import { AthletePublic } from "./pages/Recruit.jsx";
 import { Events, BuyTickets } from "./pages/Tickets.jsx";
 import { loadFamily, buildAlerts } from "./lib/alerts.js";
@@ -108,6 +109,8 @@ export default function App() {
   if (route === "/live") return <LiveIndex nav={nav} />;
   const live = /^\/live\/([A-Za-z0-9-]{2,64})(\/tv)?$/.exec(route);
   if (live && session !== undefined) return live[2] ? <LiveTv id={live[1]} /> : <LivePage id={live[1]} nav={nav} session={session} />;
+  const musicDesk = /^\/music\/((?:gym-)?[A-Za-z0-9-]{3,64})$/.exec(route);
+  if (musicDesk) return <MusicDesk id={musicDesk[1]} />;
   const scorer = /^\/score\/([A-Za-z0-9-]{3,64})$/.exec(route);
   if (scorer) return <ScorerPage id={scorer[1]} nav={nav} />;
   const ath = /^\/a\/([a-z0-9-]{1,48})$/.exec(route);
