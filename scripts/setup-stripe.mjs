@@ -9,6 +9,7 @@
 import Stripe from "stripe";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import { TIERS, PLANS, TERMS } from "../src/data/plans.js";
 
 const MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, yearly: 12 };
@@ -84,7 +85,8 @@ export async function setupStripe(stripe, { appUrl, log = () => {} }) {
 }
 
 // ---- command line ----
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL makes this work on Windows too (C:\... paths).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const key = process.env.STRIPE_SECRET_KEY, appUrl = process.env.APP_URL;
   if (!key || !/^sk_(test|live)_/.test(key) || !appUrl || !/^https:\/\//.test(appUrl)) {
     console.error("Usage: STRIPE_SECRET_KEY=sk_test_... APP_URL=https://yourdomain.com node scripts/setup-stripe.mjs");
