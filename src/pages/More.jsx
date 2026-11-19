@@ -66,8 +66,8 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
 
       {!gymAcct && <MyTicketsList />}
       {!gymAcct && me?.referral_code && <InviteCard me={me} />}
-      {!gymAcct && <RemindersCard profile={profile} me={me} refresh={refresh} />}
-      {!gymAcct && <GymCard me={me} refresh={refresh} />}
+      {!gymAcct && <details className="card fold"><summary>🔔 Reminders & travel</summary><div className="fold-body"><RemindersCard profile={profile} me={me} refresh={refresh} /></div></details>}
+      {!gymAcct && <details className="card fold"><summary>🏛️ Gym code</summary><div className="fold-body"><GymCard me={me} refresh={refresh} /></div></details>}
 
       {gymAcct ? (
         <section className="card">
@@ -108,11 +108,11 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
         </div>
       </section>
 
-      <section className="card small muted">
+      <details className="card fold small muted"><summary>🔒 Privacy & safety</summary><div className="fold-body">
         <p><b>Privacy:</b> your family's data is private to your account. Videos never leave your phone; only a few still frames are sent for AI feedback and are not stored. Score-sheet photos are read and then discarded.</p>
         <p><b>Safety:</b> {APP.name} gives guidance for parents. It doesn't replace your coach, doctor or physical therapist. Skill lists are typical benchmarks, not official rules. Not affiliated with USA Gymnastics, USA Swimming, USA Cheer, US Youth Soccer, USA Basketball or USTA.</p>
         <p>Questions? <button className="link" onClick={() => setContact(true)}>Contact us</button> · {APP.supportEmail}</p>
-      </section>
+      </div></details>
 
       <p className="center small"><a href="/welcome" onClick={(e) => { e.preventDefault(); history.pushState(null, "", "/welcome"); dispatchEvent(new PopStateEvent("popstate")); }}>View the public page</a></p>
       {contact && <ContactSheet email={session?.user?.email || ""} onClose={() => setContact(false)} />}

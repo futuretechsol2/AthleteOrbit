@@ -232,8 +232,10 @@ function MeetDayCard({ meet, gymnast, go, can, upgrade }) {
       </div>
       {!tips ? <Spinner label="Getting today's tips…" /> : <>
         <div className="tip"><b>💬 Say this today</b><p>{tips.motivation}</p></div>
-        <div className="tip"><b>🍎 Fuel</b><p>{tips.nutrition}</p></div>
-        {tips.focus && <div className="tip"><b>🎯 Focus cue</b><p>{tips.focus}</p></div>}
+        <details className="fold tips-more"><summary>🍎 Fuel{tips.focus ? " & 🎯 focus cue" : ""}</summary><div className="fold-body">
+          <div className="tip"><b>🍎 Fuel</b><p>{tips.nutrition}</p></div>
+          {tips.focus && <div className="tip"><b>🎯 Focus cue</b><p>{tips.focus}</p></div>}
+        </div></details>
         {!tips.ai && !can("coach") && <button className="link small" onClick={() => upgrade("coach")}>Get tips written for {gymnast.name} by the AI coach · Pro</button>}
       </>}
     </section>

@@ -92,6 +92,32 @@ const FAQ = TOP_FAQ;
 // For every parent — no sport needed.
 const EVERY_KID = [["📚", "School & reading", "Reading minutes, test scores and report cards in one place — see progress over the year."], ["🥦", "Picky eaters & lunchboxes", "Coach G writes school-day food plans, lunchbox ideas and a week of family dinners."], ["✅", "Life skills by age", "Tie shoes, pack a bag, cook a meal, save money — checklists for ages 2 to 17."], ["😴", "Sleep, screens & habits", "Simple routines and goals your child can see in their own read-only view."]];
 // Phones get the short version of long sections, with "Show more".
+// Phones: one swipeable "Explore" card instead of five long sections.
+const EXPLORE = [
+  ["live", "● Live scores", "Every routine, live — free", ["Search any athlete by name + city", "Gymnastics, swim, cheer, soccer and more", "No account needed"], ["See live scores", "/live"]],
+  ["family", "👪 Families", "Your season, organized", ["Snap the gym's schedule — keep only your kid's meets", "Reminders, session times, packing lists, costs", "Coach G: meal plans, nerves, technique"], ["Try free for 7 days", "/register"]],
+  ["gym", "🏛️ Gyms", "Every family set up in minutes", ["Upload your roster + one schedule photo", "Announcements and one inbox for questions", "Free live scoring, tickets, door scanning"], ["Start my gym free", "/register?type=gym"]],
+  ["kid", "🌱 Every kid", "Not a sports family? Yes, you too", ["Reading, school progress and life skills", "Picky-eater help and lunchbox ideas", "A kid-safe view they can't change"], ["Start free for my child", "/register?sport=Growing%20Up"]],
+];
+function Explore({ go }) {
+  const [t, setT] = useState(0); const [k, , title, pts, [cta, href]] = EXPLORE[t];
+  return (
+    <section className="m-explore m-only-block" aria-label="Explore AthleteOrbit">
+      <div className="m-tabs" role="tablist">{EXPLORE.map(([key, label], i) => <button key={key} role="tab" aria-selected={i === t} className={i === t ? "on" : ""} onClick={() => setT(i)}>{label}</button>)}</div>
+      <div className="m-panel" key={k}>
+        <h2>{title}</h2>
+        <ul>{pts.map((x) => <li key={x}>{x}</li>)}</ul>
+        <a className="btn btn-primary wide" href={href} onClick={go(href)}>{cta}</a>
+      </div>
+    </section>
+  );
+}
+function StickyCta({ go }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => { const f = () => setShow(window.scrollY > 520); f(); addEventListener("scroll", f, { passive: true }); return () => removeEventListener("scroll", f); }, []);
+  return <div className={`m-sticky m-only-flex ${show ? "on" : ""}`} aria-hidden={!show}><a className="btn btn-primary grow" href="/register" onClick={go("/register")} tabIndex={show ? 0 : -1}>Try free · 7 days</a><a className="btn btn-ghost" href="/?demo" tabIndex={show ? 0 : -1}>▶ Demo</a></div>;
+}
+
 function More({ items, n = 4, render, className }) {
   const [all, setAll] = useState(false);
   const small = typeof window !== "undefined" && window.matchMedia?.("(max-width: 640px)").matches;
@@ -119,29 +145,31 @@ export default function Landing({ nav }) {
         <div className="l-hero-text">
           <p className="eyebrow">For sports families — and every parent</p>
           <h1>Snap your gym's schedule. See only <em>your</em> athlete's meets.</h1>
-          <p className="l-sports" aria-label="Sports">🤸 Gymnastics · 🏊 Swimming · 📣 Cheer & Dance · ⚽ Soccer · 🏀 Basketball · 🎾 Tennis · 🌱 Not in a sport? Yes, you too</p>
-          <p className="l-lead">One photo of the season schedule and {APP.name} builds each child's calendar by level — then finds the host, the meet website and your session time online, and reminds you before every one. Scores, costs, packing lists and messages with your gym live in the same app.</p>
+          <p className="l-sports m-hide" aria-label="Sports">🤸 Gymnastics · 🏊 Swimming · 📣 Cheer & Dance · ⚽ Soccer · 🏀 Basketball · 🎾 Tennis · 🌱 Not in a sport? Yes, you too</p>
+          <p className="m-sub m-only-block">Live scores, your whole season from one photo, and an AI coach. 🤸 🏊 📣 ⚽ 🏀 🎾 + 🌱</p>
+          <p className="l-lead m-hide">One photo of the season schedule and {APP.name} builds each child's calendar by level — then finds the host, the meet website and your session time online, and reminds you before every one. Scores, costs, packing lists and messages with your gym live in the same app.</p>
           <div className="row">
             <a className="btn btn-primary" href="/register" onClick={go("/register")}>Start 7-day free trial</a>
             <a className="btn btn-ghost" href="/?demo">▶ Try the parent demo</a>
-            <a className="btn btn-ghost" href="/?demo=gym">▶ Gym owner demo</a>
+            <a className="btn btn-ghost m-hide" href="/?demo=gym">▶ Gym owner demo</a>
           </div>
           <p className="muted small hide-sm">The demos open a sample family and a sample gym — no sign-up, nothing saved.</p>
           <p className="muted small">{PLANS.parent.trialDays}-day free trial · No card needed · Cancel anytime</p>
         </div>
-        <HeroDemo />
+        <div className="m-hide"><HeroDemo /></div>
       </section>
 
       <Orbit3D />
+      <Explore go={go} />
 
-      <section className="l-section l-live">
+      <section className="l-section l-live m-hide">
         <div className="l-live-card">
           <div><p className="eyebrow">● Free for everyone</p><h2>Live scores for every sport</h2><p className="l-lead">Gymnastics meets, swim meets, soccer and basketball tournaments, cheer competitions — follow live, look up past results, share a score card. No account needed.</p>
             <div className="row"><a className="btn btn-primary" href="/live" onClick={go("/live")}>See live scores</a><a className="btn btn-ghost" href="/?page=events">Post scores for your event</a></div></div>
         </div>
       </section>
 
-      <section className="l-section l-every">
+      <section className="l-section l-every m-hide">
         <p className="eyebrow center">Not a sports family?</p>
         <h2>AthleteOrbit works for every kid</h2>
         <p className="center muted">Pick <b>🌱 Growing Up</b> when you add your child — no sport needed.</p>
@@ -162,12 +190,12 @@ export default function Landing({ nav }) {
         <div className="l-steps">{STEPS.map(([i, t, d], n) => <div key={t} className="l-step"><span className="l-num">{n + 1}</span><span className="l-icon" aria-hidden>{i}</span><h3>{t}</h3><p>{d}</p></div>)}</div>
       </section>
 
-      <section className="l-section">
+      <section className="l-section m-hide">
         <h2>Everything else a sports family juggles</h2>
         <More items={FEATURES} n={3} className="l-features" render={([i, t, d]) => <div key={t} className="l-feature"><span className="l-icon" aria-hidden>{i}</span><h3>{t}</h3><p>{d}</p></div>} />
       </section>
 
-      <section className="l-section l-gym">
+      <section className="l-section l-gym m-hide">
         <div>
           <p className="eyebrow">For gym owners and booster clubs</p>
           <h2>Upload your roster and one schedule photo. Every family is set up.</h2>
@@ -196,7 +224,7 @@ export default function Landing({ nav }) {
 
       <section className="l-section">
         <h2>Questions</h2>
-        <More items={FAQ} n={4} className="faq" render={([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>} />
+        <More items={FAQ} n={3} className="faq" render={([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>} />
         <p className="center"><a href="/faq" onClick={go("/faq")} className="link">See all questions ›</a></p>
       </section>
 
@@ -207,6 +235,7 @@ export default function Landing({ nav }) {
         <p className="muted small">Independent app. Not affiliated with any sport governing body.</p>
       </footer>
       {contact && <ContactSheet onClose={() => setContact(false)} />}
+      <StickyCta go={go} />
     </div>
   );
 }
