@@ -211,7 +211,9 @@ function RosterEdit({ row, onClose, onDone }) {
 
 function Schedule({ me }) {
   const [rows, setRows] = useState(null); const [err, setErr] = useState(null); const [snap, setSnap] = useState(false); const [edit, setEdit] = useState(null); const [busy, setBusy] = useState("");
-  const load = () => api("club/schedule", null, "GET").then((r) => setRows(r.competitions)).catch(setErr);
+  const [sum, setSum] = useState({}); const [signups, setSignups] = useState(null);
+  const loadSum = () => api("club/signups", null, "GET").then((r) => setSum(Object.fromEntries((r.meets || []).map((m) => [m.id, m])))).catch(() => {});
+  const load = () => { loadSum(); return api("club/schedule", null, "GET").then((r) => setRows(r.competitions)).catch(setErr); };
   useEffect(() => { load(); }, []);
   if (!rows) return err ? <ErrorNote error={err} /> : <Spinner label="Loading schedule…" />;
   const act = async (id, body) => { setBusy(id); setErr(null); try { await api(body.clubMeetId ? "club/lookup" : "club/schedule", body); await load(); } catch (e) { setErr(e); } setBusy(""); };
@@ -240,6 +242,10 @@ function Schedule({ me }) {
               </div>
             )}
             {m.info_checked_at && !(m.sessions || []).length && <p className="muted small">Checked online {fmt.date(String(m.info_checked_at).slice(0, 10))} · no session times posted yet. We check daily.</p>}
+            {sum[m.id] && <button className="card find-cta signup-cta" onClick={() => setSignups(m)}>
+              <span className="find-icon" aria-hidden>📋</span>
+              <span className="grow"><b>Sign-ups & entry fees</b><small>{sum[m.id].counts.going}/{sum[m.id].counts.expected} going · {sum[m.id].counts.noAnswer} no answer{sum[m.id].fee_cents ? ` · ${sum[m.id].counts.paid} paid` : ""}</small></span><span aria-hidden>›</span>
+            </button>}
             <div className="row">
               {m.status === "suggested" ? <Button disabled={busy === m.id} onClick={() => act(m.id, { publish: m.id })}>Publish to families</Button>
                 : me?.web_lookup !== false && (busy === m.id ? <Spinner label="Searching the web…" /> : <Button kind="ghost" onClick={() => act(m.id, { clubMeetId: m.id })}>🔎 {m.info_checked_at ? "Check again" : "Find host & times online"}</Button>)}
@@ -249,6 +255,7 @@ function Schedule({ me }) {
           </article>
         );
       })}
+      {signups && <Signups meet={signups} onClose={() => { setSignups(null); loadSum(); }} />}
       {snap && <SchedulePhoto mode="owner" onClose={() => setSnap(false)} onDone={() => { setSnap(false); load(); }} />}
       {edit && <CompEdit full row={edit} onClose={() => setEdit(null)} onSave={async (r) => { setEdit(null); await act(r.id || "new", r.id ? { update: r } : { add: [r] }); }} />}
     </>
@@ -294,5 +301,48 @@ function Announcements({ club }) {
       {list.length > 0 && <h2 className="section">Sent</h2>}
       {list.map((a) => <article key={a.id} className="card post"><p className="muted small">{fmt.date(a.created_at.slice(0, 10))}</p><h3>{a.title}</h3>{a.summary && <p className="post-sum"><b>In short:</b> {a.summary}</p>}<p className="pre">{a.body}</p></article>)}
     </>
+  );
+}
+
+// Meet sign-ups & entry fees: who's going, who hasn't answered, who has paid — replaces the paper sign-up sheet and
+// the "did you pay the meet fee?" texts. Families answer from the meet in their app; the gym nudges with one tap.
+function Signups({ meet, onClose }) {
+  const [d, setD] = useState(null); const [err, setErr] = useState(null); const [msg, setMsg] = useState(""); const [fee, setFee] = useState({ amt: "", due: "" }); const [busy, setBusy] = useState("");
+  const load = () => api("club/signups", null, "GET", { meet: meet.id }).then((r) => { setD(r); setFee({ amt: r.meet.fee_cents != null ? (r.meet.fee_cents / 100).toString() : "", due: r.meet.fee_due || "" }); }).catch(setErr);
+  useEffect(() => { load(); }, [meet.id]);
+  const send = async (key, body, done) => { setBusy(key); setErr(null); setMsg(""); try { const r = await api("club/signups", { meet: meet.id, ...body }); if (done) setMsg(done(r)); await load(); } catch (e) { setErr(e); } setBusy(""); };
+  const csv = () => { const rows = [["Athlete", "Level", "Family", "Email", "Status", "Paid"], ...d.athletes.map((a) => [a.name, a.level || "", a.family || "", a.email || "", a.status === "going" ? "Going" : a.status === "not_going" ? "Not going" : "No answer", a.paid ? "Yes" : ""])];
+    navigator.clipboard.writeText(rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(",")).join("\n")).then(() => setMsg("Copied — paste into a spreadsheet or the meet's entry form.")).catch(() => {}); };
+  const c = d?.counts;
+  return (
+    <Sheet title={`Sign-ups · ${meet.name}`} onClose={onClose}>
+      {!d ? (err ? <ErrorNote error={err} /> : <Spinner />) : <div className="stack">
+        <div className="stats three">
+          <div className="stat"><span className="stat-value">{c.going}/{c.expected}</span><span className="stat-label">Going</span></div>
+          <div className="stat"><span className="stat-value">{c.noAnswer}</span><span className="stat-label">No answer</span></div>
+          <div className="stat"><span className="stat-value">{d.meet.fee_cents ? `${c.paid}/${c.going}` : "—"}</span><span className="stat-label">Fee paid</span></div>
+        </div>
+        <form className="grid2" onSubmit={(e) => { e.preventDefault(); send("fee", { fee_cents: fee.amt === "" ? null : Math.round(Number(fee.amt) * 100), fee_due: fee.due || null }, () => "Entry fee saved — families see it on the meet."); }}>
+          <Field label="Entry fee ($)"><input inputMode="decimal" value={fee.amt} onChange={(e) => setFee({ ...fee, amt: e.target.value.replace(/[^\d.]/g, "") })} placeholder="95" /></Field>
+          <Field label="Due by"><input type="date" value={fee.due} onChange={(e) => setFee({ ...fee, due: e.target.value })} /></Field>
+          <Button kind="ghost" disabled={busy === "fee"}>Save fee</Button>
+        </form>
+        <div className="row tight">
+          <Button disabled={!!busy || !c.noAnswer || DEMO} onClick={() => send("nudge", { nudge: true }, (r) => `Asked ${r.nudged} famil${r.nudged === 1 ? "y" : "ies"} by email.`)}>{busy === "nudge" ? "Sending…" : `✉️ Ask the ${c.noAnswer} who haven't answered`}</Button>
+          {!!d.meet.fee_cents && <Button kind="ghost" disabled={!!busy || DEMO || !d.athletes.some((a) => a.status === "going" && !a.paid)} onClick={() => send("unpaid", { nudge: "unpaid" }, (r) => `Fee reminder sent to ${r.nudged} famil${r.nudged === 1 ? "y" : "ies"}.`)}>💵 Remind unpaid</Button>}
+          <button className="link" onClick={csv}>Copy as spreadsheet</button>
+        </div>
+        {msg && <p className="note note-ok">{msg}</p>}
+        <ErrorNote error={err} />
+        {!d.athletes.length ? <p className="muted">No families with athletes at these levels have joined yet. Invite them from Overview.</p> : d.athletes.map((a) => (
+          <div key={a.gymnast_id} className="signup-row">
+            <span className="grow"><b>{a.name}</b><small className="muted"> · {a.level || "—"}{a.family ? ` · ${a.family}` : ""}</small></span>
+            <select aria-label={`${a.name} status`} value={a.status || ""} onChange={(e) => send(a.gymnast_id, { gymnast_id: a.gymnast_id, status: e.target.value || null })}>
+              <option value="">No answer</option><option value="going">Going</option><option value="not_going">Not going</option></select>
+            {!!d.meet.fee_cents && <label className="check small"><input type="checkbox" checked={a.paid} disabled={busy === a.gymnast_id} onChange={(e) => send(a.gymnast_id, { gymnast_id: a.gymnast_id, paid: e.target.checked })} /> Paid</label>}
+          </div>
+        ))}
+      </div>}
+    </Sheet>
   );
 }

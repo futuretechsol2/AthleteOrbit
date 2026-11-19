@@ -44,8 +44,10 @@ export function TicketPage({ id, nav, session }) {
         <p className="eyebrow">🎟️ Skip-the-line tickets</p>
         <h1>{l.name}</h1>
         <p>{when(l)}{l.location ? ` · ${l.location}` : ""}{l.host ? ` · hosted by ${l.host}` : ""}</p>
+        {!!l.attending_gyms?.length && <p className="small">Gyms competing: {l.attending_gyms.join(" · ")}</p>}
       </section>
       <Updates list={l.updates} />
+      {l.live_enabled && l.live_status && l.live_status !== "off" && <a className="card find-cta" href={`/live/${l.id}`}><span className="find-icon" aria-hidden>●</span><span className="grow"><b>{l.live_status === "final" ? "Final results" : "Live scores now"}</b><small>Free — no account needed</small></span><span aria-hidden>›</span></a>}
       {paidId ? (
         <div className="card center stack">
           {!done ? <Spinner label="Confirming your payment…" /> : done === "email" ? <><h2>Payment received 🎉</h2><p>Your tickets are on their way to your email.</p></>
@@ -186,22 +188,24 @@ function feedback(ok) {
 }
 
 // In the app: pick a meet with tickets on sale when adding a meet ("Find this meet").
-export function FindListing({ onPick }) {
+export function FindListing({ onPick, always = false }) {
   const [q, setQ] = useState(""); const [rows, setRows] = useState(null);
   useEffect(() => { const t = setTimeout(() => api("tickets/search", null, "GET", { q }).then((r) => setRows(r.listings)).catch(() => setRows([])), 250); return () => clearTimeout(t); }, [q]);
-  if (rows && !rows.length && !q) return null;
+  if (rows && !rows.length && !q && !always) return null;
   return (
     <div className="find-listing">
-      <Field label="🎟️ Find this meet (tickets in the app)"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search meet name or city" /></Field>
+      {always && rows && !rows.length && <p className="muted small">{q ? "No meets on sale match that." : "No meets have tickets on sale right now. Check back closer to meet season."}</p>}
+      <Field label={always ? "🔎 Find a meet with tickets on sale" : "🎟️ Find this meet (tickets in the app)"}><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search meet name or city" /></Field>
       {(rows || []).slice(0, 5).map((l) => <button type="button" key={l.id} className="list-row" onClick={() => onPick(l)}><span className="grow"><b>{l.name}</b><small className="muted"> · {when(l)}{l.location ? ` · ${l.location}` : ""}</small></span><span className="pill pill-registered">Tickets</span></button>)}
     </div>
   );
 }
 
 // In the app: More > My tickets.
-export function MyTicketsList() {
+export function MyTicketsList({ empty = false }) {
   const [rows, setRows] = useState(null);
   useEffect(() => { api("tickets/mine", null, "GET").then((r) => setRows(r.orders)).catch(() => setRows([])); }, []);
+  if (empty && rows && !rows.length) return <section className="card"><h3>🎟️ My tickets</h3><p className="muted small">Tickets you buy with this account's email show up here.</p></section>;
   if (!rows?.length) return null;
   return (
     <section className="card">
@@ -244,10 +248,46 @@ export function TicketsAdmin() {
   );
 }
 
+// Saved as attending_gyms (names, gyms on AthleteOrbit first) + club_codes (their codes, same order).
+function initGyms(row) {
+  const names = row.attending_gyms || [], codes = row.club_codes || [];
+  if (!names.length) return codes.map((c) => ({ name: c, code: c })); // events saved before gym names existed
+  return names.map((n, i) => ({ name: n, code: codes[i] || null }));
+}
+const sortGyms = (gs) => [...gs.filter((g) => g.code), ...gs.filter((g) => !g.code)];
+// "Which gyms are coming?" Type a gym name or gym code: gyms on AthleteOrbit are matched (their families get the link
+// by email); any other gym name is kept on the event page as typed.
+function GymPicker({ value, onChange, near = "" }) {
+  const [q, setQ] = useState(""); const [hits, setHits] = useState([]); const [web, setWeb] = useState(null);
+  useEffect(() => { setWeb(null); if (q.trim().length < 2) return setHits([]); const t = setTimeout(() => api("gyms/search", null, "GET", { q: q.trim() }).then((r) => setHits(r.gyms || [])).catch(() => setHits([])), 250); return () => clearTimeout(t); }, [q]);
+  const add = (g) => { if (!value.some((x) => x.name.toLowerCase() === g.name.toLowerCase())) onChange([...value, { name: g.name, code: g.code || null }]); setQ(""); setHits([]); setWeb(null); };
+  const searchWeb = () => { setWeb("busy"); api("gyms/search", null, "GET", { q: q.trim(), web: 1, near }).then((r) => setWeb(r.unavailable ? "off" : r.online || [])).catch(() => setWeb([])); };
+  const typed = q.trim();
+  return (
+    <div className="field gym-picker">
+      <span className="field-label">Gyms attending</span>
+      <small className="muted">Search by gym name or gym code. Gyms on AthleteOrbit get the link emailed to their families.</small>
+      {!!value.length && <div className="chips">{value.map((g) => <span key={g.name} className="chip on">{g.code ? "✓ " : ""}{g.name}<button type="button" className="chip-x" aria-label={`Remove ${g.name}`} onClick={() => onChange(value.filter((x) => x !== g))}>×</button></span>)}</div>}
+      <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (hits[0]) add(hits[0]); else if (typed.length > 1) add({ name: typed, code: null }); } }} placeholder="e.g. Queen City Flyers" aria-label="Search gyms" />
+      {typed.length > 1 && <div className="gym-hits">
+        {hits.map((g) => <button type="button" key={g.code} className="list-row" onClick={() => add(g)}><span className="grow"><b>{g.name}</b><small className="muted"> · {g.code}</small></span><span className="pill pill-registered">On AthleteOrbit</span></button>)}
+        {Array.isArray(web) && web.map((g) => <button type="button" key={g.name + g.city} className="list-row" onClick={() => add(g)}><span className="grow"><b>{g.name}</b><small className="muted">{g.city ? ` · ${g.city}` : ""}</small></span><span className="pill">Found online</span></button>)}
+        {Array.isArray(web) && !web.length && <p className="muted small" style={{ padding: "6px 12px" }}>Nothing found online for “{typed}”.</p>}
+        {web === "off" && <p className="muted small" style={{ padding: "6px 12px" }}>Online search isn't available right now.</p>}
+        {!hits.some((g) => g.name.toLowerCase() === typed.toLowerCase()) && <>
+          {web === null && typed.length > 2 && <button type="button" className="list-row" onClick={searchWeb}><span className="grow">🔎 Search online for “{typed}”</span><small className="muted">finds the gym's official name</small></button>}
+          {web === "busy" && <div className="list-row"><Spinner label="Searching online…" /></div>}
+          <button type="button" className="list-row" onClick={() => add({ name: typed, code: null })}><span className="grow">＋ Add “{typed}” as typed</span></button>
+        </>}
+      </div>}
+    </div>
+  );
+}
+
 function ListingForm({ row, onClose, onSaved, organizer = false }) {
   const [f, setF] = useState({ name: row.name || "", host: row.host || "", location: row.location || "", start_date: row.start_date || "", end_date: row.end_date || "",
     sessions: (row.sessions || []).join("\n"), types: (row.ticket_types?.length ? row.ticket_types : [{ id: "adult", name: "Adult day pass", price: 15 }, { id: "child", name: "Child (6-12)", price: 8 }]),
-    fee: ((row.buyer_fee_cents ?? 150) / 100).toFixed(2), pct: row.platform_pct || 0, organizer_name: row.organizer_name || "", organizer_email: row.organizer_email || "", clubs: (row.club_codes || []).join(", "), status: row.status || "draft",
+    fee: ((row.buyer_fee_cents ?? 150) / 100).toFixed(2), pct: row.platform_pct || 0, organizer_name: row.organizer_name || "", organizer_email: row.organizer_email || "", gyms: initGyms(row), status: row.status || "draft",
     sport: row.sport || "Gymnastics", tickets: row.id ? (row.ticket_types || []).length > 0 : true });
   const [err, setErr] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -257,7 +297,7 @@ function ListingForm({ row, onClose, onSaved, organizer = false }) {
     try {
       await api(organizer ? "tickets/organizer" : "admin/listings", { id: row.id, name: f.name, host: f.host, location: f.location, start_date: f.start_date, end_date: f.end_date || null, sessions: f.sessions.split("\n"),
         sport: f.sport, ticket_types: f.tickets ? f.types.filter((t) => t.name).map((t) => ({ ...t, price: Number(t.price) })) : [], buyer_fee_cents: Math.round(Number(f.fee) * 100), platform_pct: Number(f.pct),
-        organizer_name: f.organizer_name, organizer_email: f.organizer_email, club_codes: f.clubs.split(",").map((s) => s.trim()).filter(Boolean), status: f.tickets ? f.status : "draft" });
+        organizer_name: f.organizer_name, organizer_email: f.organizer_email, club_codes: sortGyms(f.gyms).filter((g) => g.code).map((g) => g.code), attending_gyms: sortGyms(f.gyms).map((g) => g.name), status: f.tickets ? f.status : "draft" });
       onSaved(f);
     } catch (e2) { setErr(e2); }
   }
@@ -277,8 +317,8 @@ function ListingForm({ row, onClose, onSaved, organizer = false }) {
         {organizer ? <p className="note">You keep 100% of the ticket price. Buyers pay a {usd(150)} service fee per ticket. Stripe sends your money to your bank automatically.</p> : <>
         <div className="grid2"><Field label="Service fee per ticket ($)" hint="Paid by the buyer, kept by AthleteOrbit"><input inputMode="decimal" value={f.fee} onChange={set("fee")} /></Field><Field label="Our % of ticket price" hint="0 if the organizer keeps 100%"><input inputMode="decimal" value={f.pct} onChange={set("pct")} /></Field></div>
         <div className="grid2"><Field label="Organizer name"><input value={f.organizer_name} onChange={set("organizer_name")} /></Field><Field label="Organizer email"><input type="email" value={f.organizer_email} onChange={set("organizer_email")} /></Field></div></>}
-        <Field label="Gym codes attending (comma separated)" hint="Their families get the ticket link"><input value={f.clubs} onChange={set("clubs")} placeholder="DEMO-1A2B3C" /></Field>
         </>}
+        <GymPicker value={f.gyms} near={f.location} onChange={(gyms) => setF({ ...f, gyms })} />
         {f.tickets && <Field label="Status" hint={organizer ? "Put tickets on sale after you connect your bank (Get paid)." : undefined}><select value={f.status} onChange={set("status")}><option value="draft">Draft (hidden)</option><option value="on_sale">On sale</option><option value="closed">Closed</option></select></Field>}
         <ErrorNote error={err} />
         <Button className="wide">Save</Button>
@@ -290,7 +330,7 @@ function ListingForm({ row, onClose, onSaved, organizer = false }) {
 // For meet organizers and host gyms: run your own ticketed events.
 export function Events() {
   const [rows, setRows] = useState(null); const [edit, setEdit] = useState(null); const [msg, setMsg] = useState(""); const [err, setErr] = useState(null);
-  const [people, setPeople] = useState(null); const [post, setPost] = useState(null); const [live, setLive] = useState(null);
+  const [people, setPeople] = useState(null); const [post, setPost] = useState(null); const [live, setLive] = useState(null); const [share, setShare] = useState(null);
   const load = () => api("tickets/organizer", null, "GET").then((r) => setRows(r.listings)).catch(setErr);
   useEffect(() => { load(); }, []);
   const copy = async (t, what) => { try { await navigator.clipboard.writeText(t); setMsg(`${what} copied`); setTimeout(() => setMsg(""), 2500); } catch {} };
@@ -319,24 +359,79 @@ export function Events() {
           </div>
           {!l.payouts && <button className="card find-cta" onClick={() => getPaid(l)}><span className="find-icon" aria-hidden>🏦</span><span className="grow"><b>Get paid: connect your bank</b><small>About 5 minutes with Stripe. Needed before tickets go on sale.</small></span><span aria-hidden>›</span></button>}
           <div className="row tight">
+            <button className="chip chip-primary" onClick={() => setShare(l)}>📲 Share with families</button>
             <button className="chip" onClick={() => setEdit(l)}>Edit</button>
             <button className="chip" onClick={() => copy(l.public_url, "Buy link")}>Copy buy link</button>
             <a className="chip" href={l.door_url} target="_blank" rel="noreferrer">📷 Open door scanner</a>
             <button className="chip" onClick={() => copy(l.door_url, "Door scanner link for volunteers")}>Copy door link</button>
             <button className="chip live-chip" onClick={() => setLive(l)}>● Live scores</button>
+            <button className="chip" onClick={() => copy(l.score_url, "Scorer link (no account needed) ")}>✍️ Copy scorer link</button>
             <button className="chip" onClick={() => setPeople(l)}>Who's coming</button>
             {l.status === "on_sale" && <button className="chip" onClick={() => setPost(l)}>📣 Live update</button>}
           </div>
+          {!!l.attending_gyms?.length && <p className="muted small">Gyms attending: {l.attending_gyms.join(", ")}</p>}
           {l.updates?.[0] && <p className="muted small">Last update: “{l.updates[0].text}”</p>}
         </article>
       ))}
       {edit && <ListingForm organizer row={edit} onClose={() => setEdit(null)} onSaved={(f) => { setEdit(null); load(); setMsg(f && !f.tickets ? "Saved. Tap ● Live scores on the event to post scores and share the free live link." : "Saved."); }} />}
       {live && <LiveManage listing={live} onClose={() => { setLive(null); load(); }} />}
+      {share && <ShareSheet listing={share} onClose={() => setShare(null)} />}
       {people && <Attendees listing={people} onClose={() => setPeople(null)} />}
       {post && <LiveUpdate listing={post} onClose={() => setPost(null)} onDone={(r) => { setPost(null); setMsg(`Update posted${r.emailed ? ` and emailed to ${r.emailed} buyer${r.emailed === 1 ? "" : "s"}` : ""}.`); load(); }} />}
     </div>
   );
 }
+// One place to get an event in front of every family: QR code (print it, put it on a slide), link, phone share sheet,
+// and one-tap sends to the gym's own families (app + email) and to the families of every attending gym.
+function ShareSheet({ listing: l, onClose }) {
+  const selling = l.status === "on_sale" && (l.ticket_types || []).length > 0;
+  const url = selling ? l.public_url : l.live_url || l.share_url;
+  const [qr, setQr] = useState(null); const [msg, setMsg] = useState(""); const [err, setErr] = useState(null); const [busy, setBusy] = useState("");
+  useEffect(() => { QRCode.toDataURL(url, { width: 640, margin: 2, color: { dark: "#16213E", light: "#FFFFFF" } }).then(setQr).catch(() => {}); }, [url]);
+  useEffect(() => { if (!selling && !l.live_enabled) api("live/manage", { id: l.id, live_enabled: true }).then(() => { l.live_enabled = true; }).catch(() => {}); }, [l.id]);
+  const text = selling ? `Tickets for ${l.name} (${when(l)}) are on sale — buy here and show the QR code at the door, no line:` : `Follow live scores for ${l.name} (${when(l)}) — free, no account needed:`;
+  const run = async (key, fn) => { setBusy(key); setErr(null); setMsg(""); try { setMsg(await fn()); } catch (e) { setErr(e); } setBusy(""); };
+  return (
+    <Sheet title={`Share · ${l.name}`} onClose={onClose}>
+      <div className="stack center">
+        <p className="muted small">{selling ? "This QR opens the ticket page. Families buy, then get their own QR tickets by email." : "Tickets aren't on sale, so this QR opens the free live-scores page."}</p>
+        {qr ? <img src={qr} alt={`QR code for ${url}`} className="event-qr" /> : <div className="event-qr" />}
+        <p className="mono small">{url.replace(/^https?:\/\//, "")}</p>
+        <div className="row tight center">
+          <button className="btn btn-primary sm" onClick={() => run("copy", async () => { await navigator.clipboard.writeText(`${text} ${url}`); return "Message and link copied — paste it in your team group chat, email or newsletter."; })}>Copy link + message</button>
+          {typeof navigator !== "undefined" && navigator.share && <button className="btn btn-ghost sm" onClick={() => navigator.share({ title: l.name, text, url }).catch(() => {})}>Share…</button>}
+          {qr && <a className="btn btn-ghost sm" href={qr} download={`${l.name.replace(/[^\w]+/g, "-")}-QR.png`}>Download QR</a>}
+        </div>
+        <hr />
+        <h3>Send to every family at once</h3>
+        <button className="list-row" disabled={!!busy || DEMO} onClick={() => run("gym", async () => { const r = await api("club/announce", { title: selling ? `Tickets on sale: ${l.name}` : `Live scores: ${l.name}`, body: `${text}\n${url}` }); return `Posted to your gym's families in the app${r.emailed ? ` and emailed ${r.emailed}` : ""}.`; })}>
+          <span className="grow"><b>📣 My gym's families</b><small className="muted"> · app announcement + email</small></span><span>{busy === "gym" ? "…" : "›"}</span></button>
+        <button className="list-row" disabled={!!busy || !selling || DEMO} onClick={() => run("att", async () => { const r = await api("tickets/organizer-notify", { id: l.id }); return r.notified ? `Emailed ${r.notified} famil${r.notified === 1 ? "y" : "ies"}. Families already emailed aren't emailed twice.` : "Everyone we can reach already has the link (families are emailed once)."; })}>
+          <span className="grow"><b>✉️ Families of attending gyms</b><small className="muted"> · {selling ? (l.attending_gyms?.length ? l.attending_gyms.slice(0, 3).join(", ") + (l.attending_gyms.length > 3 ? "…" : "") : "plus families who have this meet on their calendar") : "after tickets go on sale"}</small></span><span>{busy === "att" ? "…" : "›"}</span></button>
+        {DEMO && <p className="muted small">Sending is switched off in demo mode.</p>}
+        {msg && <p className="note note-ok">{msg}</p>}
+        <ErrorNote error={err} />
+      </div>
+    </Sheet>
+  );
+}
+
+// Parents: buy tickets for any meet on sale and keep every ticket in one place. (Selling is for gym / organizer accounts.)
+export function BuyTickets() {
+  return (
+    <div className="stack">
+      <section className="hero">
+        <p className="eyebrow">🎟️ Tickets</p>
+        <h1>Buy & view meet tickets</h1>
+        <p className="hero-sub">Skip the ticket-table line: buy here, get QR tickets by email, show them at the door. Grandparents can buy from the same link — no account needed.</p>
+      </section>
+      <MyTicketsList empty />
+      <section className="card"><FindListing always onPick={(l) => { location.href = `/tickets/${l.id}`; }} /></section>
+      <p className="muted small center">Run a meet or own a gym? Selling tickets is for gym & organizer accounts — <a href="/register?type=gym">create one free</a> with your gym's email.</p>
+    </div>
+  );
+}
+
 function Attendees({ listing, onClose }) {
   const [rows, setRows] = useState(null); const [q, setQ] = useState(""); const [err, setErr] = useState(null);
   useEffect(() => { api("tickets/attendees", null, "GET", { id: listing.id }).then((r) => setRows(r.attendees)).catch(setErr); }, [listing.id]);

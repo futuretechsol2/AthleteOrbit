@@ -840,3 +840,22 @@ create index if not exists gymnasts_hide_search on public.gymnasts(hide_search) 
 
 -- ---------- v17.3: athlete last name ----------
 alter table public.gymnasts add column if not exists last_name text check (last_name is null or char_length(last_name) <= 40);
+
+-- ---------- v18: attending gyms by name, meet sign-ups & entry fees ----------
+alter table public.meet_listings add column if not exists attending_gyms text[] not null default '{}';
+alter table public.club_meets add column if not exists fee_cents int check (fee_cents is null or (fee_cents >= 0 and fee_cents <= 100000));
+alter table public.club_meets add column if not exists fee_due date;
+create table if not exists public.meet_rsvps (
+  id uuid primary key default gen_random_uuid(),
+  club_meet_id uuid not null references public.club_meets(id) on delete cascade,
+  gymnast_id uuid not null references public.gymnasts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text check (status in ('going','not_going')),
+  paid_at timestamptz,
+  note text check (note is null or char_length(note) <= 200),
+  updated_at timestamptz not null default now(),
+  unique (club_meet_id, gymnast_id)
+);
+create index if not exists meet_rsvps_meet on public.meet_rsvps(club_meet_id);
+alter table public.meet_rsvps enable row level security;
+-- Families and gyms reach sign-ups only through the server (service role); no direct client access.

@@ -11,7 +11,7 @@ export const FAQ_GROUPS = [
   ] },
   { group: "Live scores", items: [
     ["Do I need an account or subscription to watch live scores?", "No. Live score pages are free for everyone — open the link from your gym or the meet, or find the meet at athleteorbit.org/live. No sign-up needed.", true],
-    ["Who posts the scores?", "Official scores are posted by the meet organizer during or after the meet. Parents can also add their own athlete's scores as they happen; those are marked “Parent-reported” and replaced automatically when official scores arrive."],
+    ["Who posts the scores?", "Watching live scores never needs an account. Official scores are posted by the meet organizer — or by a volunteer at the scorer table using the organizer's private scorer link (no account needed). Parents can also add their own athlete's scores as they happen; those are marked “Parent-reported” and replaced automatically when official scores arrive."],
     ["Who can see parent-reported scores?", "Your own family, plus families on your athlete's team (same gym) if you choose to share. They are never shown on the public page as official results."],
     ["Can I get a notification when my athlete's score posts?", "Yes — tap Follow next to any athlete on a live page. Following is included in Basic and Pro (and free during the trial)."],
   ] },

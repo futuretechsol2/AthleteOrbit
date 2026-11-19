@@ -323,6 +323,32 @@ function ScoreCard({ row, meet, signedIn, onClose }) {
 }
 
 // ---------- Organizer: live scoring for one event (opened from Sell tickets → event) ----------
+// /score/:id?k=… — volunteer scorer link. No account: the organizer copies this link for a scorer table volunteer.
+export function ScorerPage({ id, nav }) {
+  const k = new URLSearchParams(location.search).get("k") || "";
+  const [d, setD] = useState(null); const [err, setErr] = useState(null); const [msg, setMsg] = useState(""); const [tab, setTab] = useState("enter");
+  const load = () => api("live/meet", null, "GET", { id, k }).then(setD).catch(setErr);
+  useEffect(() => { load(); }, [id]);
+  if (!d) return <div className="tix-shell">{err ? <div className="card"><ErrorNote error={err} /></div> : <Spinner label="Loading the scorer table…" />}</div>;
+  const listing = { ...d.meet, id, k }; const sport = d.meet.sport || "Gymnastics";
+  const done = (r) => { setMsg(`Posted — ${r.added} new, ${r.updated} updated. Families see it within 20 seconds.`); load(); };
+  return (
+    <div className="tix-shell stack">
+      <section className="tix-hero"><p className="eyebrow">✍️ Scorer table · no account needed</p><h1>{d.meet.name}</h1><p>Scores you post appear on the free live page right away.</p></section>
+      <div className="row"><a className="btn btn-ghost sm" href={`/live/${id}`} target="_blank" rel="noreferrer">Open live page</a></div>
+      {msg && <p className="note note-ok">{msg}</p>}
+      <div className="chips">{[["enter", "Type scores"], ["import", "Upload results file"], ["list", `Posted (${d.rows.length})`]].map(([key, l]) => <button key={key} className={`chip ${tab === key ? "on" : ""}`} onClick={() => setTab(key)}>{l}</button>)}</div>
+      <div className="card">
+        {tab === "enter" && <EnterScores listing={listing} sport={sport} onSaved={done} />}
+        {tab === "import" && <ImportScores listing={listing} sport={sport} onSaved={(r) => { done(r); setTab("list"); }} />}
+        {tab === "list" && <Posted rows={d.rows} sport={sport} pro={d.meet.pro} name={d.meet.name} onRemove={async (rid) => { try { await api("live/post", { id, k, remove: rid }); load(); } catch (e) { setErr(e); } }} />}
+      </div>
+      <ErrorNote error={err} />
+      <p className="muted small center">Keep this link private — anyone with it can post scores for this event.</p>
+    </div>
+  );
+}
+
 export function LiveManage({ listing, onClose }) {
   const [d, setD] = useState(null); const [err, setErr] = useState(null); const [msg, setMsg] = useState(""); const [tab, setTab] = useState("enter");
   const sport = listing.sport || "Gymnastics";
@@ -354,7 +380,7 @@ function EnterScores({ listing, sport, onSaved }) {
   const clean = (v) => (F === "timed" ? v.replace(/[^\d.:]/g, "") : F === "match" ? v.replace(/\D/g, "") : v.replace(/[^\d.]/g, ""));
   async function save(e) {
     e.preventDefault(); setBusy(true); setErr(null);
-    try { const r = await api("live/post", { id: listing.id, rows: [{ ...f, scores: Object.fromEntries(Object.entries(f.scores).filter(([, v]) => v !== "")) }] }); onSaved(r); setF({ ...blank, session: F === "match" ? "" : f.session, level: f.level, division: F === "match" ? "" : f.division, gender: f.gender }); nameRef.current?.focus(); } catch (e2) { setErr(e2); }
+    try { const r = await api("live/post", { id: listing.id, k: listing.k, rows: [{ ...f, scores: Object.fromEntries(Object.entries(f.scores).filter(([, v]) => v !== "")) }] }); onSaved(r); setF({ ...blank, session: F === "match" ? "" : f.session, level: f.level, division: F === "match" ? "" : f.division, gender: f.gender }); nameRef.current?.focus(); } catch (e2) { setErr(e2); }
     setBusy(false);
   }
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -395,7 +421,7 @@ const IMPORT_SAMPLE = {
 function ImportScores({ listing, sport, onSaved }) {
   const [text, setText] = useState(""); const [busy, setBusy] = useState(false); const [err, setErr] = useState(null); const file = useRef(null);
   const parsed = useMemo(() => (text.trim() ? parseResults(text, { sport }) : null), [text, sport]);
-  async function post() { setBusy(true); setErr(null); try { onSaved(await api("live/post", { id: listing.id, rows: parsed.rows })); setText(""); } catch (e) { setErr(e); } setBusy(false); }
+  async function post() { setBusy(true); setErr(null); try { onSaved(await api("live/post", { id: listing.id, k: listing.k, rows: parsed.rows })); setText(""); } catch (e) { setErr(e); } setBusy(false); }
   return (
     <div className="form">
       <p className="muted small">{IMPORT_HELP[formatOf(sport)]} Upload again any time — results are updated, not duplicated. Past events work too.</p>

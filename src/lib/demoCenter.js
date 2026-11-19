@@ -100,6 +100,20 @@ export function demoCenter(path, body, d, save, uid, gymRole) {
     }
     return done({ added, perAthlete: per, shared: b.share ? (b.competitions || []).length : 0 });
   }
+  if (path === "club/signups") {
+    c.rsvps ||= {}; c.fees ||= {};
+    const list = (m) => c.roster.filter((r) => meetMatches(m, r)).map((r, i) => { const x = (c.rsvps[m.id] ||= {})[r.id] ?? (i % 3 === 0 ? { status: "going", paid: i % 2 === 0 } : i % 3 === 1 ? { status: null } : { status: "going", paid: false }); c.rsvps[m.id][r.id] = x;
+      return { gymnast_id: r.id, name: r.name, level: r.level, family: `${r.name.split(" ")[1]} family`, email: "family@example.com", status: x.status, paid: !!x.paid }; });
+    const counts = (l) => ({ expected: l.length, going: l.filter((a) => a.status === "going").length, notGoing: l.filter((a) => a.status === "not_going").length, noAnswer: l.filter((a) => !a.status).length, paid: l.filter((a) => a.paid).length });
+    const out = (m) => ({ id: m.id, name: m.name, start_date: m.start_date, levels: m.levels || [], fee_cents: c.fees[m.id]?.fee_cents ?? 9500, fee_due: c.fees[m.id]?.fee_due ?? null });
+    const pub = c.meets.filter((m) => m.status !== "suggested");
+    if (!b.meet) return done({ meets: pub.map((m) => ({ ...out(m), counts: counts(list(m)) })) });
+    const m = c.meets.find((x) => x.id === b.meet); if (!m) return { meets: [] };
+    if (b.fee_cents !== undefined) { c.fees[m.id] = { fee_cents: b.fee_cents, fee_due: b.fee_due }; return done({ saved: true }); }
+    if (b.gymnast_id) { const x = ((c.rsvps[m.id] ||= {})[b.gymnast_id] ||= {}); if (b.paid !== undefined) x.paid = b.paid; if (b.status !== undefined) x.status = b.status; return done({ saved: true }); }
+    if (b.nudge) { const l = list(m); return done({ nudged: b.nudge === "unpaid" ? l.filter((a) => a.status === "going" && !a.paid).length : l.filter((a) => !a.status).length }); }
+    const l = list(m); return done({ meet: out(m), athletes: l, counts: counts(l) });
+  }
   if (path === "club/schedule") {
     if (b.remove) { c.meets = c.meets.filter((m) => m.id !== b.remove); d.meets = d.meets.filter((m) => m.club_meet_id !== b.remove); }
     else if (b.publish) { const m = c.meets.find((x) => x.id === b.publish); if (m) m.status = "published"; sync(d, c); }

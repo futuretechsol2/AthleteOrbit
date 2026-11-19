@@ -7,6 +7,7 @@ export function fakeSupabase(tables, users) {
       select(_c, o = {}) { if (op === "select") opts = o; else ret = true; return api; },
       insert(p) { op = "insert"; payload = p; return api; },
       update(p) { op = "update"; payload = p; return api; },
+      upsert(p, o = {}) { op = "upsert"; payload = p; opts = { ...opts, onConflict: o.onConflict }; return api; },
       delete() { op = "delete"; return api; },
       eq(c, v) { filters.push((r) => r[c] === v); return api; },
       gte(c, v) { filters.push((r) => r[c] >= v); return api; },
@@ -20,6 +21,7 @@ export function fakeSupabase(tables, users) {
     async function run() {
       if (op === "insert" && table === "profiles" && (Array.isArray(payload) ? payload : [payload]).some((p) => p.username && rows().some((r) => String(r.username).toLowerCase() === String(p.username).toLowerCase()))) return { data: null, error: { code: "23505", message: "duplicate key value violates unique constraint \"profiles_username_key\"" } };
       if (op === "insert") { (Array.isArray(payload) ? payload : [payload]).forEach((p) => rows().push({ id: `id_${Math.random().toString(36).slice(2)}`, created_at: new Date().toISOString(), ...p })); return { data: null, error: null }; }
+      if (op === "upsert") { const keys = String(opts.onConflict || "id").split(","); for (const p of Array.isArray(payload) ? payload : [payload]) { const hit = rows().find((r) => keys.every((k) => r[k] === p[k])); if (hit) Object.assign(hit, p); else rows().push({ id: `id_${Math.random().toString(36).slice(2)}`, ...p }); } return { data: null, error: null }; }
       let match = rows().filter((r) => filters.every((f) => f(r)));
       if (op === "delete") { const all = rows(); for (const r of match) all.splice(all.indexOf(r), 1); return { data: null, error: null }; }
       if (op === "update") { match.forEach((r) => Object.assign(r, payload)); return { data: ret ? match : null, error: null }; }

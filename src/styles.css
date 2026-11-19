@@ -887,3 +887,16 @@ input.invalid, .invalid-wrap input { border-color: #DC2626 !important; box-shado
 .fold > .fold-body > .card { box-shadow: none; border: 0; padding: 0; margin: 0; background: transparent; }
 .fold > .fold-body > .card > h3:first-child, .fold > .fold-body > .card > .card-head:first-child h3 { display: none; }
 @media (max-width: 640px) { .simple-plans .plan-row:not(.on) .plan-row-list { display: none; } .landing .l-section { padding-top: 28px; padding-bottom: 28px; } }
+/* v18: event share sheet, gym picker */
+.event-qr { width: 220px; height: 220px; margin: 0 auto; border-radius: 14px; border: 1px solid var(--line); background: #fff; display: block; }
+.chip-primary { background: var(--brand, #6D28D9); color: #fff; border-color: transparent; }
+.chip .chip-x { background: none; border: 0; color: inherit; font-size: 16px; line-height: 1; margin-left: 6px; padding: 0 2px; cursor: pointer; }
+.gym-picker .chips { margin: 6px 0; }
+.gym-hits { border: 1px solid var(--line); border-radius: 12px; margin-top: 4px; overflow: hidden; }
+.gym-hits .list-row { width: 100%; border-radius: 0; }
+.rsvp-card .row { gap: 8px; }
+.signup-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.signup-row > .grow { flex: 1 1 100%; }
+.signup-row select { flex: 1 1 auto; max-width: 220px; }
+.signup-row .check { margin: 0; white-space: nowrap; }
+.signup-row:last-child { border-bottom: 0; }

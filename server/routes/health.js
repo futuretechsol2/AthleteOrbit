@@ -25,11 +25,13 @@ export default handler(["GET"], async () => {
       const b = await sb.from("meet_listings").select("id").limit(1);
       const c = await sb.from("club_meets").select("id").limit(1);
       const d = await sb.from("photos").select("id").limit(1);
-      const e = await sb.from("meet_listings").select("live_enabled,live_status,branding").limit(1);
+      const e = await sb.from("meet_listings").select("live_enabled,live_status,branding,attending_gyms").limit(1);
       const f = await sb.from("live_scores").select("id,status").limit(1);
       const g = await sb.from("athlete_pages").select("id").limit(1);
       const h = await sb.from("gymnasts").select("hide_search,search_name,last_name").limit(1);
-      checks.schemaUpToDate = !b.error && !c.error && !d.error && !e.error && !f.error && !g.error && !h.error;
+      const i = await sb.from("meet_rsvps").select("id").limit(1);
+      const j = await sb.from("club_meets").select("fee_cents,fee_due").limit(1);
+      checks.schemaUpToDate = !b.error && !c.error && !d.error && !e.error && !f.error && !g.error && !h.error && !i.error && !j.error;
       if (!checks.schemaUpToDate) checks.schemaFix = "Supabase → SQL Editor → paste supabase/schema.sql → Run";
       const st = await sb.storage.from("photos").createSignedUrls(["health-check.jpg"], 60).catch(() => ({ error: true }));
       checks.photoStorage = !(st?.error && /bucket/i.test(String(st.error.message || st.error)));

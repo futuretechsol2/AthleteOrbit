@@ -17,9 +17,9 @@ import GymPage, { FindAthleteFirst } from "./pages/Center.jsx";
 import Photos from "./pages/Photos.jsx";
 import AthleteView, { athleteViewState } from "./pages/AthleteView.jsx";
 import { About, Contact, Tour, Faq } from "./pages/Info.jsx";
-import { LiveIndex, LivePage, LiveTv } from "./pages/Live.jsx";
+import { LiveIndex, LivePage, LiveTv, ScorerPage } from "./pages/Live.jsx";
 import { AthletePublic } from "./pages/Recruit.jsx";
-import { Events } from "./pages/Tickets.jsx";
+import { Events, BuyTickets } from "./pages/Tickets.jsx";
 import { loadFamily, buildAlerts } from "./lib/alerts.js";
 import { SPORTS, SPORT_NAMES, conf, sportOf, usesScores } from "./data/sports.js";
 import { PLANS, TIERS, TIER_ORDER, FEATURE_TIER, hasFeature, money, normTier } from "./data/plans.js";
@@ -108,6 +108,8 @@ export default function App() {
   if (route === "/live") return <LiveIndex nav={nav} />;
   const live = /^\/live\/([A-Za-z0-9-]{2,64})(\/tv)?$/.exec(route);
   if (live && session !== undefined) return live[2] ? <LiveTv id={live[1]} /> : <LivePage id={live[1]} nav={nav} session={session} />;
+  const scorer = /^\/score\/([A-Za-z0-9-]{3,64})$/.exec(route);
+  if (scorer) return <ScorerPage id={scorer[1]} nav={nav} />;
   const ath = /^\/a\/([a-z0-9-]{1,48})$/.exec(route);
   if (ath) return <AthletePublic slug={ath[1]} nav={nav} />;
   const tix = /^\/(tickets|my-tickets|door)\/([A-Za-z0-9-]{3,64})$/.exec(route);
@@ -302,7 +304,7 @@ function Main({ session, nav }) {
   const FAMILY_WIDE = ["costs", "gym", "admin", "more", "photos", "events"];
   const needsKid = !gymnast && !familyMode && !FAMILY_WIDE.includes(page.name);
 
-  const P = { home: familyMode ? Family : Home, scores: Results, skills: Progress, coach: Coach, more: More, meets: Meets, costs: Costs, gym: GymPage, admin: Admin, photos: Photos, events: Events }[page.name] || Home;
+  const P = { home: familyMode ? Family : Home, scores: Results, skills: Progress, coach: Coach, more: More, meets: Meets, costs: Costs, gym: GymPage, admin: Admin, photos: Photos, events: profile.account_type === "gym" || (me?.admin && !DEMO) ? Events : BuyTickets }[page.name] || Home;
   const navActive = ["costs", "gym", "admin", "photos", "events"].includes(page.name) ? "more" : page.name;
   const tabs = NAV(S);
 
@@ -328,7 +330,7 @@ function Main({ session, nav }) {
         <button onClick={() => go("costs")} className={page.name === "costs" ? "on" : ""}><span aria-hidden>💵</span>Costs & budget</button>
         <button onClick={() => go("gym")} className={page.name === "gym" ? "on" : ""}><span aria-hidden>🏛️</span>My gym{me?.unread_messages ? <span className="badge inline">{me.unread_messages}</span> : null}</button>
         <button onClick={() => go("photos")} className={page.name === "photos" ? "on" : ""}><span aria-hidden>📸</span>Photos & prints</button>
-        <button onClick={() => go("events")} className={page.name === "events" ? "on" : ""}><span aria-hidden>🎟️</span>Sell tickets</button>
+        <button onClick={() => go("events")} className={page.name === "events" ? "on" : ""}><span aria-hidden>🎟️</span>{profile.account_type === "gym" || (me?.admin && !DEMO) ? "Sell tickets" : "Tickets"}</button>
         <hr />
         <a className="side-link" href="/live"><span aria-hidden>●</span>Live scores</a>
         <a className="side-link" href="/tour"><span aria-hidden>▶</span>Feature tour</a>

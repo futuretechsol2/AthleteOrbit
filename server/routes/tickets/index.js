@@ -1,12 +1,14 @@
 // Meet tickets: families buy spectator tickets in the app and skip the line at the door.
 // The organizer gets the ticket money (automatically through Stripe Connect when their account is linked);
 // AthleteOrbit keeps a small service fee per ticket (+ an optional % agreed with the organizer).
+import QRCode from "qrcode";
 import crypto from "node:crypto";
 import { cleanListing } from "../admin/listings.js";
-import { handler, readJson, requireUser, deps, env, HttpError, sendEmail, emailLayout, esc, signToken, checkToken, todayIn, connectError, dbError } from "../../lib.js";
+import { isAdmin } from "../admin/support.js";
+import { handler, readJson, requireUser, deps, env, HttpError, sendEmail, emailLayout, esc, signToken, checkToken, todayIn, connectError, dbError, callClaude, canSearchWeb, WEB_SEARCH, extractJson } from "../../lib.js";
 const safe = async (fn) => { try { return await fn(); } catch (e) { throw connectError(e); } };
 
-const PUBLIC = "id,name,host,location,sport,start_date,end_date,sessions,ticket_types,buyer_fee_cents,status,updates";
+const PUBLIC = "id,name,host,location,sport,start_date,end_date,sessions,ticket_types,buyer_fee_cents,status,updates,attending_gyms,live_enabled,live_status";
 const pick = (l, keys = PUBLIC) => Object.fromEntries(keys.split(",").map((k) => [k, l[k] ?? null]));
 const appUrl = () => env("APP_URL").replace(/\/$/, "");
 const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -105,13 +107,23 @@ export async function fulfillTickets(s) {
     const code = newCode(); codes.push([x.type.name, code]);
     await sb.from("tickets").insert({ order_id: orderId, listing_id: l.id, type_name: x.type.name, session_label: s.metadata.session || null, code });
   }
-  if (email) await sendEmail({ to: email, subject: `Your tickets: ${l.name}`, html: emailLayout({ title: `You're in — ${l.name}`,
-    body: `<p>${esc(l.start_date)}${l.location ? ` · ${esc(l.location)}` : ""}${s.metadata.session ? `<br>${esc(s.metadata.session)}` : ""}</p>
-<p><a href="${esc(orderLink(orderId))}" style="color:#6D28D9;font-weight:bold">Show my tickets (QR codes)</a></p>
-<p>Show the QR code or the code at the door to skip the line:</p><ul>${codes.map(([t, c]) => `<li>${esc(t)}: <b style="font-family:monospace;font-size:16px">${c}</b></li>`).join("")}</ul>
-<p style="color:#7B8197;font-size:13px">Questions about the meet? Contact ${esc(l.organizer_name || "the meet organizer")}${l.organizer_email ? ` (${esc(l.organizer_email)})` : ""}.</p>` }) }).catch(() => {});
+  if (email) await sendTicketEmail({ email, listing: l, orderId, session: s.metadata.session, codes }).catch((e) => console.error("ticket email", e.message));
   return orderId;
 }
+
+// The ticket email carries one scannable QR image per ticket (inline, so it shows even offline at the door).
+export async function ticketQr(code) { return QRCode.toBuffer(code, { width: 360, margin: 1, color: { dark: "#16213E", light: "#FFFFFF" } }); }
+async function sendTicketEmail({ email, listing: l, orderId, session, codes }) {
+  const shown = codes.slice(0, 12);
+  const attachments = await Promise.all(shown.map(async ([, c], i) => ({ filename: `ticket-${c}.png`, content: await ticketQr(c), cid: `qr${i}` })));
+  const cards = shown.map(([t, c], i) => `<div style="border:1px solid #E6E3F0;border-radius:14px;padding:14px;margin:0 0 12px;text-align:center"><img src="cid:qr${i}" width="180" height="180" alt="QR code ${c}" style="display:block;margin:0 auto 8px"><b>${esc(t)}</b><br><span style="font-family:monospace;font-size:18px;letter-spacing:2px">${c}</span></div>`).join("");
+  await sendEmail({ to: email, subject: `Your tickets: ${l.name}`, attachments, html: emailLayout({ title: `You're in — ${l.name}`,
+    body: `<p>${esc(l.start_date)}${l.location ? ` · ${esc(l.location)}` : ""}${session ? `<br>${esc(session)}` : ""}</p>
+<p>Show a QR code at the door — one per person. Turn your screen brightness up.</p>${cards}${codes.length > shown.length ? `<p>+ ${codes.length - shown.length} more ticket(s) on your ticket page.</p>` : ""}
+<p><a href="${esc(orderLink(orderId))}" style="color:#6D28D9;font-weight:bold">Open my tickets on my phone</a></p>
+<p style="color:#7B8197;font-size:13px">Questions about the meet? Contact ${esc(l.organizer_name || "the meet organizer")}${l.organizer_email ? ` (${esc(l.organizer_email)})` : ""}.</p>` }) });
+}
+
 
 async function orderView(orderId) {
   const sb = deps.supabase();
@@ -227,6 +239,10 @@ export async function notifyListing(listingId) {
 // Any account (a host gym, a booster club, a school) can create an event, connect Stripe for payouts,
 // share the buy link, scan tickets at the door with a phone, and send "running late" updates to every buyer.
 const DOOR = (l) => `${appUrl()}/door/${l.id}?k=${l.door_key}`;
+// Volunteers at the scoring table post scores from this link — no account needed.
+export const scorerKey = (id) => signToken(`score:${id}`);
+const SCORER = (l) => `${appUrl()}/score/${l.id}?k=${scorerKey(l.id)}`;
+const sellsTicketsNow = (l) => l.status === "on_sale" && (l.ticket_types || []).length > 0;
 async function ownListing(userId, id) {
   const l = await loadListing(id);
   if (l.owner_id !== userId) throw new HttpError(404, "We couldn't find that event.");
@@ -241,6 +257,8 @@ export const organizer = handler(["GET", "POST"], async (req) => {
   const sb = deps.supabase();
   if (req.method === "POST") {
     const b = await readJson(req);
+    // Parents buy tickets; gyms and meet organizers sell them.
+    if (!b.id && profile?.account_type !== "gym" && !isAdmin(user, profile)) throw Object.assign(new HttpError(403, "Selling tickets is for gym and meet-organizer accounts. Parents can buy tickets from the event's link."), { code: "organizer_only" });
     const rec = cleanListing({ ...b, platform_pct: 0, buyer_fee_cents: 150, organizer_email: b.organizer_email || user.email, organizer_name: b.organizer_name || profile.gym_name || profile.full_name });
     rec.platform_pct = 0; rec.buyer_fee_cents = Number(process.env.TICKET_FEE_CENTS || 150);
     const existing = b.id ? await ownListing(user.id, b.id) : null;
@@ -259,7 +277,8 @@ export const organizer = handler(["GET", "POST"], async (req) => {
     const os = (orders || []).filter((o) => o.listing_id === l.id && o.status === "paid"), ts = (tix || []).filter((t) => t.listing_id === l.id);
     return { ...pick(l), live_enabled: !!l.live_enabled, live_status: l.live_status || "off", live_pro: !!l.live_pro, organizer_name: l.organizer_name, organizer_email: l.organizer_email, club_codes: l.club_codes, payouts: !!l.stripe_account, updates: l.updates || [],
       sold: ts.length, checkedIn: ts.filter((t) => t.used_at).length, orders: os.length, gross_cents: os.reduce((a, o) => a + o.tickets_cents, 0),
-      public_url: `${appUrl()}/tickets/${l.id}`, door_url: DOOR(l) };
+      public_url: `${appUrl()}/tickets/${l.id}`, door_url: DOOR(l), score_url: SCORER(l), live_url: `${appUrl()}/live/${l.id}`,
+      share_url: sellsTicketsNow(l) ? `${appUrl()}/tickets/${l.id}` : `${appUrl()}/live/${l.id}`, attending_gyms: l.attending_gyms || [] };
   }) };
 });
 export const organizerConnect = handler(["POST"], async (req) => {
@@ -322,4 +341,42 @@ export const doorSearch = handler(["POST"], async (req) => {
   if (!hits.length) return { results: [] };
   const { data: tix } = await sb.from("tickets").select("*").in("order_id", hits.map((o) => o.id));
   return { results: hits.map((o) => ({ name: o.buyer_name || o.buyer_email?.replace(/(.{2}).*(@.*)/, "$1…$2") || "Buyer", tickets: (tix || []).filter((t) => t.order_id === o.id).map((t) => ({ code: t.code, type_name: t.type_name, used_at: t.used_at })) })) };
+});
+
+// Organizer: email the families of the gyms attending (and families with this meet on their calendar).
+export const organizerNotify = handler(["POST"], async (req) => {
+  const { user } = await requireUser(req);
+  const l = await ownListing(user.id, (await readJson(req)).id);
+  if (l.status !== "on_sale") throw new HttpError(409, "Put tickets on sale first, then send the link to families.");
+  return notifyListing(l.id);
+});
+
+// Find gyms by name or gym code (event setup: "which gyms are coming?").
+// ?web=1 also looks the name up online (real gyms/clubs with city & website) for gyms not on AthleteOrbit yet.
+const GYM_LOOKUP = `You find real youth sports gyms or clubs (gymnastics, cheer, swim, etc.) matching a name the user typed, using web search. Return ONLY JSON:
+{"gyms":[{"name": string, "city": string|null, "state": string|null, "website": string|null}]}
+Rules: up to 5 real, currently operating gyms/clubs whose name matches what was typed (prefer the region given). Use the gym's official name. website: the gym's own site, https only. Never invent gyms; if unsure, return fewer or {"gyms":[]}.`;
+export const gymSearch = handler(["GET"], async (req) => {
+  const { profile, user } = await requireUser(req);
+  const sp = new URL(req.url || "/", "http://x").searchParams;
+  const q = (sp.get("q") || "").trim();
+  if (sp.get("web") === "1") {
+    if (q.length < 3) return { online: [] };
+    if (profile?.account_type !== "gym" && !isAdmin(user, profile)) throw new HttpError(403, "Online gym search is for gym and organizer accounts.");
+    if (!canSearchWeb()) return { online: [], unavailable: true };
+    const near = (sp.get("near") || "").slice(0, 60);
+    const text = await callClaude({ system: GYM_LOOKUP, maxTokens: 700, tools: [WEB_SEARCH], messages: [{ role: "user", content: `Gym name typed: ${q.slice(0, 80)}${near ? `\nRegion: ${near}` : ""}` }] }).catch(() => "");
+    let j = null; try { j = extractJson(text); } catch {}
+    const s = (v, n) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+    const online = (Array.isArray(j?.gyms) ? j.gyms : []).map((g) => ({ name: s(g.name, 80), city: [s(g.city, 40), s(g.state, 20)].filter(Boolean).join(", ") || null, website: /^https:\/\/[^\s"<>]+$/.test(g.website || "") ? g.website.slice(0, 200) : null })).filter((g) => g.name).slice(0, 5);
+    return { online };
+  }
+  if (q.length < 2) return { gyms: [] };
+  const sb = deps.supabase(), safeQ = q.replace(/[%_,()]/g, " ").trim();
+  const [{ data: byName }, { data: byCode }] = await Promise.all([
+    sb.from("clubs").select("name,code").ilike("name", `%${safeQ}%`).limit(8),
+    sb.from("clubs").select("name,code").eq("code", q.toUpperCase()).limit(1)]);
+  const seen = new Set(), gyms = [];
+  for (const g of [...(byCode || []), ...(byName || [])]) if (!seen.has(g.code)) { seen.add(g.code); gyms.push({ name: g.name, code: g.code }); }
+  return { gyms };
 });

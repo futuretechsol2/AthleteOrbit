@@ -3,7 +3,7 @@
 // meet's live page for free, without an account. Followers get an email when their athlete's official scores post.
 // Revenue: Live Scoring Pro per meet (TV scoreboard, branding, sponsors, export) — free when the meet sells tickets with us.
 import crypto from "node:crypto";
-import { handler, readJson, requireUser, requireFeature, deps, env, HttpError, dbError, sendEmail, emailEnabled, emailLayout, esc, todayIn, addDays, throttle, clientIp } from "../lib.js";
+import { handler, readJson, requireUser, requireFeature, deps, env, HttpError, dbError, sendEmail, emailEnabled, emailLayout, esc, todayIn, addDays, throttle, clientIp, checkToken } from "../lib.js";
 import { isAdmin } from "./admin/support.js";
 import { totalOf, athleteKey, eventsFor, fmtScore, formatOf, parseTime, matchLine } from "../../src/data/live.js";
 import { SPORT_NAMES } from "../../src/data/sports.js";
@@ -117,7 +117,11 @@ async function findAthletes(words, listings, today) {
 export const meet = handler(["GET"], async (req) => {
   const id = new URL(req.url || "/", "http://x").searchParams.get("id");
   const l = await getListing(id);
-  if (!l.live_enabled) throw new HttpError(404, "Live scores for this meet haven't started yet.");
+  const k = new URL(req.url || "/", "http://x").searchParams.get("k");
+  if (!l.live_enabled) {
+    if (!(k && checkToken(`score:${l.id}`, k))) throw new HttpError(404, "Live scores for this meet haven't started yet.");
+    await deps.supabase().from("meet_listings").update({ live_enabled: true }).eq("id", l.id); l.live_enabled = true; // the volunteer scorer opened their link: turn live scores on
+  }
   const sb = deps.supabase();
   const { data: rows } = await sb.from("live_scores").select("*").eq("listing_id", l.id);
   const official = (rows || []).filter((r) => r.source === "official");
@@ -154,10 +158,15 @@ export const manage = handler(["POST"], async (req) => {
   return { ok: true, ...patch };
 });
 
-export const post = handler(["POST"], async (req) => {
+// Scores come from the organizer's account, or from a volunteer at the scoring table using the event's scorer link (no account).
+async function scorerListing(req, b) {
+  if (b.k) { if (!checkToken(`score:${b.id}`, b.k)) throw new HttpError(403, "This scorer link isn't valid. Ask the organizer for a new one."); return getListing(b.id); }
   const { user, profile } = await requireUser(req);
+  return ownListing(user, b.id, profile);
+}
+export const post = handler(["POST"], async (req) => {
   const b = await readJson(req);
-  const l = await ownListing(user, b.id, profile);
+  const l = await scorerListing(req, b);
   const sb = deps.supabase();
   if (b.remove) { await sb.from("live_scores").delete().eq("id", b.remove).eq("listing_id", l.id).eq("source", "official"); return { removed: true }; }
   const sport = l.sport || "Gymnastics";

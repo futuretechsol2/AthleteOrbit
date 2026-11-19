@@ -10,7 +10,6 @@ import { Button, Field, Sheet, ErrorNote, fmt, Avatar, PhotoPicker } from "../ui
 import { RemindersCard, GymCard, ContactSheet, AdminInbox, Announce } from "./Extras.jsx";
 import { termLabel, tierName } from "../data/plans.js";
 import { passwordIssues } from "./Auth.jsx";
-import { MyTicketsList } from "./Tickets.jsx";
 
 export default function More({ gymnasts, allKids, profile, paid, refresh, openPaywall, go, session, me, params, sport }) {
   const [recruit, setRecruit] = useState(null); const [kidView, setKidView] = useState(false);
@@ -36,7 +35,7 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
       <nav className="card menu">
         {!gymAcct && <>
           <button onClick={() => go("photos")}>📸 Photos & prints</button>
-          <button onClick={() => go("events")}>🎟️ Run a meet? Tickets & live scores</button>
+          <button onClick={() => go("events")}>🎟️ {profile?.account_type === "gym" || (me?.admin && !DEMO) ? "Sell tickets & live scores" : "Buy & view tickets"}</button>
           <a href="/live">● Live scores</a>
           {kids?.length > 0 && <button onClick={() => setRecruit(kids.length === 1 ? kids[0] : "pick")}>🎓 Recruiting page</button>}
           {kids?.length > 0 && <button onClick={() => setKidView(true)}>👀 Athlete view for kids</button>}
@@ -64,7 +63,6 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
         <p className="muted small">Up to 6 children, any sport. Each child can have a photo.</p>
       </section>}
 
-      {!gymAcct && <MyTicketsList />}
       {!gymAcct && me?.referral_code && <InviteCard me={me} />}
       {!gymAcct && <details className="card fold"><summary>🔔 Reminders & travel</summary><div className="fold-body"><RemindersCard profile={profile} me={me} refresh={refresh} /></div></details>}
       {!gymAcct && <details className="card fold"><summary>🏛️ Gym code</summary><div className="fold-body"><GymCard me={me} refresh={refresh} /></div></details>}

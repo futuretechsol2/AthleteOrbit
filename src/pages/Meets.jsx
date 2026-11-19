@@ -89,6 +89,7 @@ function MeetDetail({ me, meet, gymnast, profile, can, upgrade, go, refresh, onE
         <span className={`pill pill-${meet.status.toLowerCase()}`}>{meet.status}</span>
       </div>
       <MeetInfo meet={meet} me={me} can={can} upgrade={upgrade} />
+      {!past && meet.club_meet_id && <GymRsvp meet={meet} gymnast={gymnast} />}
       {past && <button className="card find-cta" onClick={() => go?.("photos")}><span className="find-icon" aria-hidden>📸</span><span className="grow"><b>Photos from this event</b><small>Add them, share with teammates, order prints</small></span><span aria-hidden>›</span></button>}
       {!past && meet.listing_id && <a className="card pull-btn wide-pull tix-cta" href={`/tickets/${meet.listing_id}`}><span aria-hidden>🎟️</span><b>Buy tickets — skip the line at the door</b></a>}
       {past && sportOf(gymnast) === "Gymnastics" && <button className="card pull-btn wide-pull" onClick={() => { onClose(); can("onlineScores") ? go("scores", { online: true }) : upgrade("onlineScores"); }}><span aria-hidden>🌐</span><b>Get scores from MeetScoresOnline</b>{!can("onlineScores") && <span className="lock">Basic</span>}</button>}
@@ -111,6 +112,26 @@ function MeetDetail({ me, meet, gymnast, profile, can, upgrade, go, refresh, onE
         </div>
       ) : can("trip") ? <Trip meet={meet} profile={profile} refresh={refresh} /> : <Empty icon="🧳" title="Trip & hotel planner is in Pro" text="Hotel and flight search for the event dates, your booking details in one place, and an AI trip plan built around session time." action={<Button onClick={() => upgrade("trip")}>See Pro</Button>} />}
     </Sheet>
+  );
+}
+
+// The gym asks "is your athlete competing?" — families answer here; entry fee & paid status shown from the gym.
+function GymRsvp({ meet, gymnast }) {
+  const [r, setR] = useState(undefined); const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
+  useEffect(() => { api("meet/rsvp", null, "GET", { meet: meet.id }).then((x) => setR(x.rsvp)).catch(() => setR(null)); }, [meet.id]);
+  if (!r) return null;
+  const answer = async (status) => { setBusy(true); setErr(null); try { setR((await api("meet/rsvp", { meet: meet.id, status })).rsvp); } catch (e) { setErr(e); } setBusy(false); };
+  const fee = r.fee_cents ? `$${(r.fee_cents / 100).toFixed(2).replace(/\.00$/, "")}` : null;
+  return (
+    <section className="card rsvp-card">
+      <p><b>{r.gym}</b> asks: is {gymnast?.name || "your athlete"} competing?</p>
+      <div className="row tight">
+        <button className={`chip ${r.status === "going" ? "on" : ""}`} disabled={busy} onClick={() => answer("going")}>✓ Yes, competing</button>
+        <button className={`chip ${r.status === "not_going" ? "on" : ""}`} disabled={busy} onClick={() => answer("not_going")}>✗ Not this one</button>
+      </div>
+      {fee && <p className="small">{r.paid ? <span className="pill pill-registered">Entry fee paid</span> : <>Entry fee <b>{fee}</b>{r.fee_due ? ` · due ${fmt.date(r.fee_due)}` : ""} · <span className="muted">pay your gym the usual way; they mark it paid here</span></>}</p>}
+      <ErrorNote error={err} />
+    </section>
   );
 }
 

@@ -14,7 +14,8 @@ export function cleanListing(b) {
   const rec = { name: str(b.name), host: str(b.host), location: str(b.location), sport: str(b.sport, 40) || "Gymnastics", start_date: date(b.start_date), end_date: date(b.end_date),
     sessions: (Array.isArray(b.sessions) ? b.sessions : []).map((s) => str(s, 80)).filter(Boolean).slice(0, 20), ticket_types: types,
     buyer_fee_cents: Math.max(0, Math.min(2000, Math.round(Number(b.buyer_fee_cents ?? 150)))), platform_pct: Math.max(0, Math.min(30, Number(b.platform_pct || 0))),
-    organizer_name: str(b.organizer_name), organizer_email: str(b.organizer_email, 200), club_codes: (Array.isArray(b.club_codes) ? b.club_codes : []).map((c) => String(c).toUpperCase().trim()).filter(Boolean).slice(0, 50),
+    organizer_name: str(b.organizer_name), organizer_email: str(b.organizer_email, 200), club_codes: (Array.isArray(b.club_codes) ? b.club_codes : []).map((c) => String(c).toUpperCase().trim()).filter((c) => /^[A-Z0-9-]{3,24}$/.test(c)).slice(0, 50),
+    attending_gyms: (Array.isArray(b.attending_gyms) ? b.attending_gyms : []).map((g) => str(g, 80)).filter(Boolean).slice(0, 50),
     status: ["draft", "on_sale", "closed"].includes(b.status) ? b.status : "draft", notes: str(b.notes, 500) };
   if (!rec.name || !rec.start_date) throw new HttpError(400, "Add the meet name and start date.");
   if (rec.status === "on_sale" && !types.length) throw new HttpError(400, "Add at least one ticket type with a price before selling.");

@@ -150,6 +150,10 @@ test("photos are sorted into the event by the day they were taken", () => {
 });
 
 test("organizers run their own events: create, get paid first, sell, attendees, live update, door lookup", async () => {
+  // Parents buy tickets; only gym / organizer accounts create events.
+  const parentTry = await call(ROUTES["tickets/organizer"], { token: "org", body: { name: "My Meet", start_date: "2027-01-23", ticket_types: [{ name: "Adult", price: 15 }] } });
+  assert.equal(parentTry.status, 403); assert.equal(parentTry.json.code, "organizer_only");
+  T.profiles.find((p) => p.id === "org").account_type = "gym";
   const c = await call(ROUTES["tickets/organizer"], { token: "org", body: { name: "Queen City Classic", start_date: "2027-01-23", location: "Charlotte, NC", sessions: ["Session 1 · Sat 8:00 AM"], ticket_types: [{ name: "Adult", price: 15 }], status: "draft", platform_pct: 25, buyer_fee_cents: 900 } });
   assert.equal(c.status, 200, JSON.stringify(c.json)); const L = T.meet_listings[0];
   assert.equal(L.owner_id, "org"); assert.equal(L.platform_pct, 0, "organizer keeps 100%"); assert.equal(L.buyer_fee_cents, 150); assert.equal(L.organizer_email, "meet@host.com");

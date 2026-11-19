@@ -353,14 +353,15 @@ export async function smtpTransport() {
 }
 export function smsEnabled() { return process.env.SMS_ENABLED === "true" && !!process.env.TWILIO_ACCOUNT_SID; }
 
-export async function sendEmail({ to, subject, html, text, replyTo, unsubscribeUrl }) {
+export async function sendEmail({ to, subject, html, text, replyTo, unsubscribeUrl, attachments }) {
   if (!emailEnabled()) return { skipped: true };
   const headers = unsubscribeUrl ? { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : undefined;
   if (smtpEnabled()) {
     const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
     try {
       const t = await smtpTransport();
-      await t.sendMail({ from: { name: process.env.EMAIL_FROM_NAME || "AthleteOrbit", address: from }, to, subject, html, text: text || stripHtml(html), ...(replyTo ? { replyTo } : {}), ...(headers ? { headers } : {}) });
+      await t.sendMail({ from: { name: process.env.EMAIL_FROM_NAME || "AthleteOrbit", address: from }, to, subject, html, text: text || stripHtml(html), ...(replyTo ? { replyTo } : {}), ...(headers ? { headers } : {}),
+        ...(attachments?.length ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.type || "image/png", ...(a.cid ? { cid: a.cid } : {}) })) } : {}) });
       return { sent: true, via: "smtp" };
     } catch (e) { console.error("SMTP", e.code || "", e.message); throw Object.assign(new Error(`email failed (SMTP ${e.code || e.responseCode || ""})`), { smtp: true, detail: e.message }); }
   }
@@ -374,6 +375,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, unsubscribeU
       subject,
       content: [{ type: "text/plain", value: text || stripHtml(html) }, { type: "text/html", value: html }],
       ...(headers ? { headers } : {}),
+      ...(attachments?.length ? { attachments: attachments.map((a) => ({ content: Buffer.from(a.content).toString("base64"), filename: a.filename, type: a.type || "image/png", disposition: a.cid ? "inline" : "attachment", ...(a.cid ? { content_id: a.cid } : {}) })) } : {}),
     }),
   });
   if (!r.ok) { const t = (await r.text().catch(() => "")).slice(0, 300); console.error("SendGrid", r.status, t); throw Object.assign(new Error(`email failed (SendGrid ${r.status})`), { sendgrid: r.status, detail: t }); }
