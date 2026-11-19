@@ -41,3 +41,19 @@ test("isHidden matching: full name, last initial, first name + gym; never hides 
   assert.ok(!isHidden({ name: "Maya Smith", gym: "Other" }, H("maya")), "first name only + no club never hides");
   assert.ok(!isHidden({ name: "Maya P.", gym: "Other Gym" }, H("maya patel", "tidal gym")), "same initial at another gym stays");
 });
+
+test("sign-up: the confirmation link in the email still works (no later update cancels it)", async () => {
+  const mails = []; Object.assign(process.env, { SENDGRID_API_KEY: "sg", EMAIL_FROM: "hi@athleteorbit.org", APP_URL: "https://athleteorbit.org" }); delete process.env.SMTP_HOST; delete process.env.EMAIL_CONFIRM;
+  deps.fetch = async (url, o) => { if (String(url).includes("sendgrid")) { mails.push(JSON.parse(o.body)); return { ok: true, status: 202, text: async () => "" }; } throw new Error("unexpected " + url); };
+  const tokenIn = (m) => /token_hash=([\w]+)/.exec(JSON.stringify(m))[1];
+  // 1) brand-new family
+  let r = await call(ROUTES["auth/register"], { body: { email: "fresh@x.com", password: "Gymnast2026", username: "freshdad", full_name: "Fresh Dad", adult: true } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(tokenIn(mails.at(-1)), T._valid.new1, "the emailed link is the one Supabase still holds");
+  // 2) signing up again on an old, never-confirmed account (new password wins, and the new link works)
+  T.profiles.push({ id: "old1", email: "old@x.com", username: "olddad", _unconfirmed: true, created_at: "2026-11-01T00:00:00Z" });
+  r = await call(ROUTES["auth/register"], { body: { email: "old@x.com", password: "NewPass2026", username: "olddad", full_name: "Old Dad", adult: true } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(T._passwords.old1, "NewPass2026");
+  assert.equal(tokenIn(mails.at(-1)), T._valid.old1, "link made after the password update");
+});

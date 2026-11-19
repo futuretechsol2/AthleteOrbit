@@ -47,13 +47,14 @@ export const register = handler(["POST"], async (req) => {
       // The email already has an account. One email = one family login. The app tries the password they just typed
       // (if it's theirs they're simply signed in); otherwise it offers Log in / Reset password. We also email a
       // one-tap sign-in link in case they forgot their password.
-      const { data: link } = await sb.auth.admin.generateLink({ type: "magiclink", email });
+      let { data: link } = await sb.auth.admin.generateLink({ type: "magiclink", email });
       // Made earlier but the confirmation email never arrived: finish it now so the password they set works.
       if (!mustConfirm() && link?.user?.id && !link.user.email_confirmed_at) { await sb.auth.admin.updateUserById(link.user.id, { email_confirm: true }).catch(() => {}); return { exists: true }; }
       const unconfirmed = !!link?.user && !link.user.email_confirmed_at;
       // Signing up again before ever confirming: the details typed NOW win (password, username, name). Otherwise the
       // confirm link signs them in but their new password "doesn't work" later — the old one from the first try does.
-      if (unconfirmed) await adoptDetails(sb, link.user.id, password, data);
+      // Updating a user cancels any link already made for them, so make the emailed link AFTER the update.
+      if (unconfirmed) { await adoptDetails(sb, link.user.id, password, data); const { data: fresh } = await sb.auth.admin.generateLink({ type: "magiclink", email }); if (fresh?.properties?.hashed_token) link = fresh; }
       // Never confirmed (an earlier sign-up whose email didn't arrive): send the confirmation email again.
       if (link?.properties?.hashed_token && emailEnabled()) await sendEmail({ to: email, subject: unconfirmed ? "Confirm your email to start AthleteOrbit" : "You already have an AthleteOrbit account", html: emailLayout({ title: unconfirmed ? "Confirm your email" : "Welcome back!",
         body: unconfirmed ? `<p>Tap the button to confirm your email. You'll be signed in right away.</p>${button(linkFor(link.properties, "magiclink"), "Confirm my email")}`
@@ -63,8 +64,15 @@ export const register = handler(["POST"], async (req) => {
     if (/USERNAME_TAKEN|Database error/i.test(error.message)) throw new HttpError(409, "That username was just taken. Please pick another.");
     throw new HttpError(400, error.message);
   }
-  // If the email already existed unconfirmed, Supabase may hand back that user unchanged — apply today's details.
-  if (out?.user?.id && !out.user.email_confirmed_at) await adoptDetails(sb, out.user.id, password, data);
+  // A brand-new account already has today's password and details. Only an older, never-confirmed account that Supabase
+  // handed back needs them applied — and that update cancels the link just made, so make a fresh one afterwards.
+  let props = out?.properties, linkType = "signup";
+  const older = out?.user?.created_at && deps.now().getTime() - Date.parse(out.user.created_at) > 60000;
+  if (out?.user?.id && !out.user.email_confirmed_at && older) {
+    await adoptDetails(sb, out.user.id, password, data);
+    const { data: fresh } = await sb.auth.admin.generateLink({ type: "magiclink", email });
+    if (fresh?.properties?.hashed_token) { props = fresh.properties; linkType = "magiclink"; }
+  }
   if (!mustConfirm()) {
     const id = out?.user?.id;
     const { error: ce } = id ? await sb.auth.admin.updateUserById(id, { email_confirm: true }) : { error: new Error("no user") };
@@ -76,7 +84,7 @@ export const register = handler(["POST"], async (req) => {
   }
   try {
     await sendEmail({ to: email, subject: "Confirm your email to start AthleteOrbit", html: emailLayout({ title: `Welcome, ${full_name.split(" ")[0]}!`,
-      body: `<p>Tap the button to confirm your email. You'll be signed in right away — no extra log-in.</p>${button(linkFor(out.properties, "signup"), "Confirm my email")}<p>Your username: <b>${esc(username)}</b></p>` }) });
+      body: `<p>Tap the button to confirm your email. You'll be signed in right away — no extra log-in.</p>${button(linkFor(props, linkType), "Confirm my email")}<p>Your username: <b>${esc(username)}</b></p>` }) });
   } catch (e) {
     // Our mail service refused (SendGrid plan/credits, key or sender). Don't block the family: confirm the account
     // now and let the app sign them in with the password they just chose. One email = one account still holds.
