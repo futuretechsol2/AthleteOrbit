@@ -55,12 +55,12 @@ export const PLANS = {
     features: ["Results, skills, events and costs for up to 6 children, any sport", "AI coach: improvement and nutrition tips", "Snap results sheets, meet photos and printed season books", "Reminders, packing lists and trip plans", "Free for 7 days, no card"],
   },
   gym: {
-    name: "AthleteOrbit for Gyms",
-    who: "For gyms and booster clubs",
+    name: "AthleteOrbit for Coaches & Gyms",
+    who: "For coaches, gyms and clubs",
     prices: { monthly: 99, quarterly: 269, semiannual: 499, yearly: 899 },
     seats: 50,
     trialDays: 0,
-    features: ["Every family gets AthleteOrbit Basic (up to 50 families)", "Upload your roster — parents find their athlete in seconds", "Snap the season schedule: each athlete sees only their meets", "Messages with parents + announcements to everyone", "Meet reminders, session times and packing lists for every family"],
+    features: ["Coach OS: today's dashboard, one-tap roll call, athlete profiles with every meet", "Snap a score sheet — results saved to each athlete, trends and personal bests", "Evaluations, development plans and progress reports (AI drafts, you approve)", "Ask the assistant: “who needs attention this week?”", "Floor music for every girl, one-tap play at meets", "Every family gets AthleteOrbit Basic (up to 50 families)", "Upload your roster — parents find their athlete in seconds", "Snap the season schedule: each athlete sees only their meets", "Messages with parents + announcements to everyone", "Meet reminders, session times and packing lists for every family"],
   },
 };
 

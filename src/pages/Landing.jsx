@@ -151,7 +151,7 @@ export default function Landing({ nav }) {
           <div className="row">
             <a className="btn btn-primary" href="/register" onClick={go("/register")}>Start 7-day free trial</a>
             <a className="btn btn-ghost" href="/?demo">▶ Try the parent demo</a>
-            <a className="btn btn-ghost m-hide" href="/?demo=gym">▶ Gym owner demo</a>
+            <a className="btn btn-ghost m-hide" href="/?demo=coach">▶ Coach demo</a>
           </div>
           <p className="muted small hide-sm">The demos open a sample family and a sample gym — no sign-up, nothing saved.</p>
           <p className="muted small">{PLANS.parent.trialDays}-day free trial · No card needed · Cancel anytime</p>
@@ -197,11 +197,11 @@ export default function Landing({ nav }) {
 
       <section className="l-section l-gym m-hide">
         <div>
-          <p className="eyebrow">For gym owners and booster clubs</p>
-          <h2>Upload your roster and one schedule photo. Every family is set up.</h2>
-          <p className="l-lead">Parents search for their athlete instead of filling in forms. Each family sees only their level's competitions with session times, your announcements reach everyone as a short summary, and questions come to one inbox instead of your phone.</p>
+          <p className="eyebrow">For coaches and gyms</p>
+          <h2>Your whole team in one place — not in notebooks, spreadsheets and group texts.</h2>
+          <p className="l-lead">One-tap roll call. Snap the score sheet and every athlete's results are saved, with trends and personal bests. Evaluations and development plans in minutes (AI drafts, you approve), progress reports parents actually read — and an assistant that tells you who needs attention this week.</p>
           <ul className="perks hide-sm">{PLANS.gym.features.map((f) => <li key={f}>{f}</li>)}</ul>
-          <div className="row"><a className="btn btn-primary" href="/register?type=gym" onClick={go("/register?type=gym")}>Start my gym free for 30 days</a><a className="btn btn-ghost" href="/?demo=gym">▶ See the gym demo</a></div>
+          <div className="row"><a className="btn btn-primary" href="/register?type=gym" onClick={go("/register?type=gym")}>Start free for 30 days</a><a className="btn btn-ghost" href="/?demo=coach">▶ See the coach demo</a></div>
         </div>
       </section>
 

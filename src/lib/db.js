@@ -1,6 +1,6 @@
 // Data layer. Uses Supabase when configured; otherwise a local demo store so the app
 // can be tried instantly (demo data stays on this device only).
-import { demoCenter, demoMeExtras, demoMusic } from "./demoCenter.js";
+import { demoCenter, demoMeExtras, demoMusic, demoCoach } from "./demoCenter.js";
 import { demoLive } from "./demoLive.js";
 import { createClient } from "@supabase/supabase-js";
 
@@ -14,7 +14,7 @@ const forcedDemo = (() => {
   const q = new URLSearchParams(location.search).get("demo");
   try {
     if (q === "off") { sessionStorage.removeItem("ao-demo"); return false; }
-    if (q !== null) sessionStorage.setItem("ao-demo", q === "gym" ? "gym" : "1");
+    if (q !== null) sessionStorage.setItem("ao-demo", q === "gym" || q === "coach" ? "gym" : "1");
     return !!sessionStorage.getItem("ao-demo");
   } catch { return q !== null && q !== "off"; }
 })();
@@ -420,6 +420,7 @@ async function demoApi(path, body) {
   if (path === "meet/rsvp") { const d = demoData(); const m = d.meets.find((x) => x.id === body?.meet); if (!m?.club_meet_id) return { rsvp: null }; d.rsvp ||= {}; if (body.status) { d.rsvp[m.id] = body.status; save(d); } return { rsvp: { gym: "Demo Gymnastics", status: d.rsvp[m.id] || null, paid: false, fee_cents: 9500, fee_due: m.start_date } }; }
   if (path === "tickets/attendees") return { attendees: [["Dan Patel", "dan@example.com", 3, 0], ["Jen Brooks", "jen@example.com", 2, 0], ["Carlos Ortiz", "carlos@example.com", 4, 0]].map(([name, email, tickets, checkedIn]) => ({ name, email, tickets, checkedIn, types: "Adult day pass, Child (6-12)", session: "Session 1 · Sat 8:00 AM" })) };
   if (path === "tickets/update") { const d = demoData(); const e = (d.events || []).find((x) => x.id === body.id); if (e) { e.updates = [{ text: body.text, at: new Date().toISOString() }, ...(e.updates || [])]; save(d); } return { posted: true, emailed: 96 }; }
+  if (path.startsWith("coach/")) { const out = demoCoach(path, body, demoData(), save); if (out) return out; }
   if (path === "music" || path.startsWith("music/")) { const out = demoMusic(path, body, demoData(), save); if (out) return out; }
   if (path.startsWith("club/") && path !== "club/checkout") { const out = demoCenter(path, body, demoData(), save, uid, DEMO_GYM); if (out) return out; }
   if (path === "ai/coach") return { reply: "**Demo mode:** in the live app, Coach G answers here using your child's real results, skills and coach notes for their sport.\n\nQuick tip: beam scores usually jump fastest by fixing *small* things first — pointed feet, holding each position a full second, and sticking the dismount. Ask the coach which of those matters most right now." };

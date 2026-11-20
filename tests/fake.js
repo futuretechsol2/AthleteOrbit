@@ -20,7 +20,7 @@ export function fakeSupabase(tables, users) {
     };
     async function run() {
       if (op === "insert" && table === "profiles" && (Array.isArray(payload) ? payload : [payload]).some((p) => p.username && rows().some((r) => String(r.username).toLowerCase() === String(p.username).toLowerCase()))) return { data: null, error: { code: "23505", message: "duplicate key value violates unique constraint \"profiles_username_key\"" } };
-      if (op === "insert") { (Array.isArray(payload) ? payload : [payload]).forEach((p) => rows().push({ id: `id_${Math.random().toString(36).slice(2)}`, created_at: new Date().toISOString(), ...p })); return { data: null, error: null }; }
+      if (op === "insert") { const added = (Array.isArray(payload) ? payload : [payload]).map((p) => { const row = { id: `id_${Math.random().toString(36).slice(2)}`, created_at: new Date().toISOString(), ...p }; rows().push(row); return row; }); return { data: ret ? added : null, error: null }; }
       if (op === "upsert") { const keys = String(opts.onConflict || "id").split(","); for (const p of Array.isArray(payload) ? payload : [payload]) { const hit = rows().find((r) => keys.every((k) => r[k] === p[k])); if (hit) Object.assign(hit, p); else rows().push({ id: `id_${Math.random().toString(36).slice(2)}`, ...p }); } return { data: null, error: null }; }
       let match = rows().filter((r) => filters.every((f) => f(r)));
       if (op === "delete") { const all = rows(); for (const r of match) all.splice(all.indexOf(r), 1); return { data: null, error: null }; }

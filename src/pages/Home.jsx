@@ -1,4 +1,5 @@
 import { AthleteMusic } from "./Music.jsx";
+import { FromCoach } from "./CoachOS.jsx";
 import React, { useEffect, useState } from "react";
 import { db } from "../lib/db.js";
 import { allAround, eventsCompeted } from "../data/skills.js";
@@ -88,6 +89,7 @@ export default function Home({ gymnast, go, can, upgrade }) {
         </section>
       )}
 
+      <FromCoach gymnast={gymnast} />
       {gym && <AthleteMusic gymnast={gymnast} />}
       <CoachCard gymnast={gymnast} S={S} next={next} go={go} can={can} upgrade={upgrade} />
 

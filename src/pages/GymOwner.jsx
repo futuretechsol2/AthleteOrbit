@@ -1,4 +1,5 @@
 import { GymMusic } from "./Music.jsx";
+import { CoachToday, CoachAthletes, AthleteProfile, CoachAttendance, CoachResults, CoachAssistant } from "./CoachOS.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api, DEMO } from "../lib/db.js";
@@ -9,11 +10,12 @@ import { Button, Field, Sheet, Empty, ErrorNote, Spinner, fmt } from "../ui.jsx"
 import { openExternal } from "./More.jsx";
 import { SchedulePhoto, CompEdit, Thread, safeUrl } from "./Center.jsx";
 
-const TABS = [["home", "Overview", "⌂"], ["roster", "Roster", "👥"], ["schedule", "Schedule", "🗓"], ["music", "Music", "🎵"], ["messages", "Messages", "💬"], ["posts", "Announce", "📣"]];
+const TABS = [["home", "Today", "⌂"], ["athletes", "Athletes", "🤸"], ["attendance", "Attendance", "✅"], ["results", "Results", "📊"], ["assistant", "Assistant", "✨"], ["schedule", "Schedule", "🗓"], ["music", "Music", "🎵"], ["messages", "Messages", "💬"], ["posts", "Announce", "📣"], ["roster", "Roster", "👥"]];
 
-// Home for gym-owner accounts: roster, season schedule, messages and announcements for every family.
+// Coach / gym account home: the Coach OS (today, athletes, attendance, results, assistant) plus roster, season
+// schedule, floor music, messages and announcements for every family.
 export default function GymOwner({ profile, me, go, refresh, params }) {
-  const [clubs, setClubs] = useState(null); const [err, setErr] = useState(null); const [tab, setTab] = useState(params?.tab || "home");
+  const [clubs, setClubs] = useState(null); const [err, setErr] = useState(null); const [tab, setTab] = useState(params?.tab || "home"); const [ath, setAth] = useState(null);
   const load = () => api("club/mine", null, "GET").then((r) => setClubs(r.clubs || [])).catch((e) => { setErr(e); setClubs([]); });
   useEffect(() => { load(); }, []);
   useEffect(() => { if (params?.tab) setTab(params.tab); }, [params]);
@@ -23,7 +25,7 @@ export default function GymOwner({ profile, me, go, refresh, params }) {
   return (
     <div className="stack">
       <section className="hero">
-        <p className="eyebrow">Gym account</p>
+        <p className="eyebrow">Coach account</p>
         <h1>{club?.name || profile.gym_name || "Your gym"}</h1>
         <p className="hero-sub">{club ? `${club.families} of ${club.seats} families joined · ${club.plan === "trial" ? `free trial, ${Math.max(0, daysLeft)} days left` : `${termLabel(club.plan || "yearly")} plan`}` : "Set up once. Every family gets their own athlete's season, reminders and a direct line to you."}</p>
       </section>
@@ -31,7 +33,12 @@ export default function GymOwner({ profile, me, go, refresh, params }) {
       {!club ? <StartGym profile={profile} onStarted={() => { load(); refresh?.(); }} /> : (
         <>
           <div className="chips gym-tabs" role="tablist">{TABS.map(([k, l, i]) => <button key={k} role="tab" aria-selected={tab === k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}><span aria-hidden>{i}</span> {l}{k === "messages" && me?.unread_messages ? <span className="badge inline">{me.unread_messages}</span> : null}</button>)}</div>
-          {tab === "home" && <Overview club={club} setTab={setTab} daysLeft={daysLeft} profile={profile} />}
+          {tab === "home" && <CoachToday setTab={setTab} openAthlete={setAth}><Overview club={club} setTab={setTab} daysLeft={daysLeft} profile={profile} /></CoachToday>}
+          {tab === "athletes" && <CoachAthletes openAthlete={setAth} setTab={setTab} />}
+          {tab === "attendance" && <CoachAttendance />}
+          {tab === "results" && <CoachResults openAthlete={setAth} />}
+          {tab === "assistant" && <CoachAssistant openAthlete={setAth} />}
+          {ath && <AthleteProfile id={ath} onClose={() => setAth(null)} />}
           {tab === "roster" && <Roster club={club} />}
           {tab === "schedule" && <Schedule me={me} />}
           {tab === "music" && <GymMusic />}

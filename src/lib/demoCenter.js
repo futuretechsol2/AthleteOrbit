@@ -198,3 +198,126 @@ export function demoMeExtras(d, gymRole) {
     last_announcement: !gymRole && c.joined && c.announcements[0] ? { id: c.announcements[0].id, title: c.announcements[0].title, summary: c.announcements[0].summary || c.announcements[0].body.slice(0, 160), created_at: c.announcements[0].created_at } : null,
     club: !gymRole && c.joined ? { name: DEMO_CLUB.name, active_until: DEMO_CLUB.active_until } : null };
 }
+
+// ---------- Coach OS demo: a realistic season for the sample team (3 meets, 4 weeks of roll calls, notes) ----------
+import { analyze, RATINGS } from "../data/coach.js";
+import { eventsFor, totalOf } from "../data/live.js";
+const DEMO_MEETS = [["Fall Classic", -54], ["Pumpkin Invitational", -33], ["Turkey Invitational", -6]];
+const dayOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+const hash = (s) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+const BASE = (level) => ({ "Level 3": 8.95, "Level 4": 9.0, "Level 5": 8.9, "Level 6": 8.8, "Level 8": 8.85, "Level 9": 8.9, "Xcel Gold": 9.05 }[level] || 8.9);
+// Each athlete's story: + improving, - slipping on an event, ~ steady
+const STORY = { r0: ["+", "Bars"], r2: ["+", "Vault"], r3: ["-", "Beam"], r4: ["~", "Bars"], r5: ["+", "Rings"], r7: ["-", "Bars"], r8: ["+", "Floor"], r10: ["~", "Beam"], r11: ["+", "Bars"] };
+function seedCoach(c) {
+  if (c.coach) return c.coach;
+  const results = [], attendance = [], notes = [];
+  for (const r of c.roster) {
+    const evs = eventsFor("Gymnastics", r.gender), [kind, ev] = STORY[r.id] || ["~", evs[1]];
+    DEMO_MEETS.forEach(([name, off], i) => {
+      const scores = {};
+      for (const e of evs) {
+        let v = BASE(r.level) + ((hash(r.id + e) % 40) - 20) / 100 + (kind === "+" ? i * 0.12 : kind === "-" && e === ev ? -i * 0.2 : ((hash(r.id + e + i) % 10) - 5) / 100);
+        if (e === ev && kind !== "-") v -= 0.35; // their weakest event
+        scores[e] = Math.round(Math.min(9.85, Math.max(7.6, v)) * 40) / 40;
+      }
+      results.push({ id: `res-${r.id}-${i}`, roster_id: r.id, meet_name: name, meet_date: dayOff(off), level: r.level, scores, aa: totalOf(scores, "Gymnastics"), place: 1 + (hash(r.id + name) % 8), source: i === 2 ? "scorecard" : "manual" });
+    });
+    for (let back = 27; back >= 1; back--) {
+      const dt = new Date(Date.now() - back * 86400000); if (![1, 3, 5].includes(dt.getDay())) continue;
+      const h = hash(r.id + back);
+      const status = r.id === "r4" && back < 16 && h % 3 !== 0 ? "absent" : r.id === "r6" && h % 5 === 0 ? "late" : h % 17 === 0 ? "excused" : h % 23 === 0 ? "absent" : "present";
+      attendance.push({ roster_id: r.id, day: dt.toISOString().slice(0, 10), status });
+    }
+  }
+  const at = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  notes.push({ id: "n1", roster_id: "r0", kind: "evaluation", visibility: "parent", status: "published", created_at: at(9), ratings: { Technique: 4, "Strength & flexibility": 4, Consistency: 3, "Training effort": 5, "Competition mindset": 4 }, strengths: "Beam confidence and clean leaps; great work ethic.", weaknesses: "Kip timing on bars — she pulls early.", next_steps: "Glide swings and kip drills 3x a week." });
+  notes.push({ id: "n2", roster_id: "r0", kind: "plan", visibility: "parent", status: "published", created_at: at(8), plan: { focus: "Bars: consistent kip", current: "Kip in about 2 of 5 turns; bars 8.6–8.8", target: "Kip in 4 of 5 turns; bars 9.0+ by States", review_date: dayOff(12), goals: [{ text: "Glide swings with full extension x10 each practice", drills: "Strap bar glides; pike compression on panel", done: true }, { text: "Kip on strap bar with spot, 3 sets of 5", drills: "Kip drill on low bar with spotter", done: true }, { text: "Independent kip on low bar, 3 of 5", drills: "Kip → cast series", done: false }] } });
+  notes.push({ id: "n3", roster_id: "r3", kind: "note", visibility: "private", status: "published", created_at: at(4), body: "Hesitating on beam series since the Pumpkin meet. Talk with her about confidence; keep it light." });
+  notes.push({ id: "n4", roster_id: "r2", kind: "evaluation", visibility: "private", status: "published", created_at: at(20), ratings: { Technique: 3, Consistency: 4, "Training effort": 5 }, strengths: "Powerful vault, fearless.", weaknesses: "Bent arms on bars cast.", next_steps: "Cast handstand drills." });
+  return (c.coach = { results, attendance, notes });
+}
+const summary = (c, k, r) => {
+  const rs = k.results.filter((x) => x.roster_id === r.id), a = analyze(rs, "Gymnastics");
+  const last30 = k.attendance.filter((x) => x.roster_id === r.id && x.day >= dayOff(-30)), counted = last30.filter((x) => x.status !== "excused");
+  const ev = k.notes.filter((n) => n.roster_id === r.id && n.kind === "evaluation").sort((x, y) => (x.created_at > y.created_at ? -1 : 1))[0];
+  const plan = k.notes.find((n) => n.roster_id === r.id && n.kind === "plan");
+  return { id: r.id, name: r.name, level: r.level, group: r.group_name, sport: "Gymnastics", gender: r.gender, meets: rs.length, last_total: a.totals.at(-1) ?? null, trend: a.trend, improving: a.improving, declining: a.declining, bigDrop: a.bigDrop, weakest: a.weakest,
+    attendance: { marked: last30.length, missed: last30.filter((x) => x.status === "absent").length, rate: counted.length ? Math.round((counted.filter((x) => x.status !== "absent").length / counted.length) * 100) : null },
+    last_eval: ev?.created_at || null, plan: plan ? { id: plan.id, status: plan.status, review: plan.plan?.review_date } : null };
+};
+export function demoCoach(path, body, d, save) {
+  const c = center(d), k = seedCoach(c), b = body || {}, done = (o) => { save(d); return o; };
+  const sums = () => c.roster.map((r) => summary(c, k, r));
+  const why = (s) => { const w = []; if (s.attendance.missed >= 3) w.push(`missed ${s.attendance.missed} practices in 30 days`); if (s.bigDrop) w.push(`total down ${Math.abs(s.trend)} at the last meet`); if (!s.last_eval) w.push("never evaluated"); if (s.plan?.review && s.plan.review <= dayOff(0)) w.push("plan review is due"); return w; };
+  if (path === "coach/dashboard") {
+    const ss = sums(), t = dayOff(0), att = k.attendance.filter((a) => a.day === t), l14 = k.attendance.filter((a) => a.day >= dayOff(-14) && a.status !== "excused");
+    return { club: { name: DEMO_CLUB.name, sport: "Gymnastics", code: DEMO_CLUB.code },
+      counts: { athletes: c.roster.length, groups: new Set(c.roster.map((r) => r.level)).size, meets: c.meets.filter((m) => m.status === "published").length || 3, pendingEvals: ss.filter((s) => !s.last_eval).length, unread: 1, drafts: k.notes.filter((n) => n.status === "draft").length },
+      attendance: { today: { marked: att.length, present: att.filter((a) => a.status !== "absent" && a.status !== "excused").length }, rate14: l14.length ? Math.round((l14.filter((a) => a.status !== "absent").length / l14.length) * 100) : null },
+      upcoming: (c.meets.filter((m) => m.status === "published").length ? c.meets.filter((m) => m.status === "published") : [{ id: "u1", name: "Holiday Flip Invitational", start_date: dayOff(15), location: "Concord, NC" }, { id: "u2", name: "NC Compulsory State Championships", start_date: dayOff(22), location: "Raleigh, NC" }]).slice(0, 4),
+      attention: ss.map((s) => ({ ...s, why: why(s) })).filter((s) => s.why.some((w) => !/evaluat/.test(w))).sort((a, b2) => b2.why.length - a.why.length).slice(0, 8).map(({ id, name, level, why: w }) => ({ id, name, level, why: w })),
+      improved: ss.filter((s) => s.improving).sort((a, b2) => Math.abs(b2.trend) - Math.abs(a.trend)).slice(0, 5).map(({ id, name, level, trend }) => ({ id, name, level, trend })),
+      milestones: ss.filter((s) => s.plan?.review && s.plan.review >= t).map(({ id, name, plan }) => ({ id, name, review: plan.review })) };
+  }
+  if (path === "coach/athletes") return { athletes: sums(), ratings: RATINGS };
+  if (path === "coach/athlete") {
+    const r = c.roster.find((x) => x.id === b.id); if (!r) return { athlete: null };
+    const rs = k.results.filter((x) => x.roster_id === r.id).sort((x, y) => (x.meet_date > y.meet_date ? 1 : -1));
+    const s = summary(c, k, r);
+    return { athlete: { ...s, parent_email: r.parent_email, family_linked: r.id === "r0" || r.id === "r1" }, events: eventsFor("Gymnastics", r.gender), lowerBetter: false, results: rs, analysis: analyze(rs, "Gymnastics"),
+      attendance: { last30: s.attendance, history: k.attendance.filter((x) => x.roster_id === r.id).sort((x, y) => (x.day > y.day ? -1 : 1)) }, notes: k.notes.filter((n) => n.roster_id === r.id).sort((x, y) => (x.created_at > y.created_at ? -1 : 1)), ratings: RATINGS };
+  }
+  if (path === "coach/attendance") {
+    const day = b.day || dayOff(0);
+    if (b.marks) { for (const m of b.marks) { k.attendance = k.attendance.filter((a) => !(a.roster_id === m.roster_id && a.day === day)); if (m.status) k.attendance.push({ roster_id: m.roster_id, day, status: m.status }); } return done({ saved: b.marks.length }); }
+    return { day, athletes: c.roster.map((r) => ({ id: r.id, name: r.name, level: r.level, group: r.group_name, status: k.attendance.find((a) => a.roster_id === r.id && a.day === day)?.status || null, last30: summary(c, k, r).attendance })).sort((x, y) => (x.level || "").localeCompare(y.level || "", undefined, { numeric: true }) || x.name.localeCompare(y.name)) };
+  }
+  if (path === "coach/results") {
+    if (b.rows) { for (const row of b.rows) { const scores = Object.fromEntries(Object.entries(row.scores || {}).filter(([e, v]) => e !== "place" && v !== "" && v != null).map(([e, v]) => [e, Number(v)])); k.results = k.results.filter((x) => !(x.roster_id === row.roster_id && x.meet_name === row.meet_name && x.meet_date === row.meet_date)); k.results.push({ id: `res-${Math.random()}`, roster_id: row.roster_id, meet_name: row.meet_name, meet_date: row.meet_date, scores, aa: totalOf(scores, "Gymnastics"), place: Number(row.place) || null, source: row.source || "manual" }); } return done({ saved: b.rows.length }); }
+    if (b.remove) { k.results = k.results.filter((x) => x.id !== b.remove); return done({ removed: true }); }
+    const meets = [...new Map(k.results.map((x) => [`${x.meet_date}|${x.meet_name}`, { meet_name: x.meet_name, meet_date: x.meet_date }])).values()].sort((a, b2) => (a.meet_date > b2.meet_date ? -1 : 1));
+    return { meets, results: k.results };
+  }
+  if (path === "coach/scorecard") return { meet_name: "Holiday Flip Invitational", meet_date: dayOff(0), level: "Level 4", mine: 3, rows: [
+    { name: "Ava Ruiz", gym: "Queen City Flyers", scores: { Vault: 9.35, Bars: 9.2, Beam: 9.4, Floor: 9.3 }, aa: 37.25, place: 1, roster_id: null },
+    { name: "Ella Brooks", gym: "Demo Gymnastics", scores: { Vault: 9.4, Bars: 9.05, Beam: 9.2, Floor: 9.25 }, aa: 36.9, place: 2, roster_id: "r2", matched: "Ella Brooks" },
+    { name: "Ruby Stone", gym: "Demo Gymnastics", scores: { Vault: 9.1, Bars: 9.0, Beam: 9.15, Floor: 9.2 }, aa: 36.45, place: 3, roster_id: "r11", matched: "Ruby Stone" },
+    { name: "Lily Kim", gym: "Carolina Elite", scores: { Vault: 9.1, Bars: 9.15, Beam: 9.0, Floor: 9.2 }, aa: 36.45, place: 4, roster_id: null },
+    { name: "Liam Ortiz", gym: "Demo Gymnastics", scores: { Floor: 9.1, Vault: 9.2 }, aa: null, place: 2, roster_id: "r5", matched: "Liam Ortiz" }] };
+  if (path === "coach/notes") {
+    if (b.remove) { k.notes = k.notes.filter((n) => n.id !== b.remove); return done({ removed: true }); }
+    if (b.id) { const n = k.notes.find((x) => x.id === b.id); if (n) Object.assign(n, Object.fromEntries(Object.entries(b).filter(([x]) => x !== "id"))); return done({ saved: true }); }
+    const id = `n${Math.random().toString(36).slice(2)}`;
+    k.notes.push({ id, created_at: new Date().toISOString(), visibility: "private", status: b.kind === "note" || b.kind === "evaluation" ? "published" : "draft", ...b });
+    return done({ saved: true, id });
+  }
+  if (path === "coach/draft") {
+    const r = c.roster.find((x) => x.id === b.roster_id), s = summary(c, k, r), first = r.name.split(" ")[0], rs = k.results.filter((x) => x.roster_id === r.id), a = analyze(rs, "Gymnastics");
+    const w = s.weakest || "Bars", x = a.events[w];
+    if (b.kind === "report") return { draft: { kind: "report", visibility: "parent", body: `Hi! A quick update on ${first}.\n\n${first} has competed in ${s.meets} meets this season, and her all-around went from ${a.totals[0]?.toFixed(3)} to ${a.totals.at(-1)?.toFixed(3)}. ${((l) => (l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : l[0]))(Object.entries(a.events).filter(([, e]) => e.pbLast).map(([e]) => e)) || "Her scores"} ${Object.values(a.events).some((e) => e.pbLast) ? "were personal bests at the last meet" : "have been steady"}.\n\nAttendance over the last month: ${s.attendance.rate ?? "—"}%. ${b.observations ? b.observations + "\n\n" : ""}Our focus over the next few weeks is ${w.toLowerCase()} — she's working hard on it in practice.\n\nThank you for your support!` } };
+    return { draft: { kind: "plan", plan: { focus: `${w}: consistency`, current: `${w} ${x ? x.last.toFixed(3) : "—"} at the last meet (best ${x ? x.best.toFixed(3) : "—"})`, target: `${w} ${x ? (Math.round((x.best + 0.2) * 20) / 20).toFixed(2) : "9.0"}+ within 6 weeks`, review_date: dayOff(35), goals: [
+      { text: `${w} basics: 10 clean repetitions of the core skill each practice`, drills: w === "Bars" ? "Glide swings; kip drill on strap bar" : w === "Beam" ? "Series on low beam; 3-in-a-row challenge" : w === "Vault" ? "Run + hurdle drills; handspring onto mats" : "Turn and leap drills; routine run-throughs at half speed", done: false },
+      { text: "One full routine each practice with coach feedback", drills: "Video one rep a week and compare", done: false },
+      { text: b.observations ? `Work on: ${b.observations}` : "Confidence: finish every skill, then reset", drills: "Pressure sets — stick 3 in a row", done: false }] } }, missing: rs.length < 3 ? "More meet results would sharpen the targets." : "A recent evaluation would help target the right skills." };
+  }
+  if (path === "coach/ask") {
+    const ss = sums(), q = String(b.question || "").toLowerCase();
+    if (/miss|absen|practice|attend/.test(q)) { const m = ss.filter((s) => s.attendance.missed >= 3); return { answer: m.length ? m.map((s) => `- ${s.name} (${s.level}) missed ${s.attendance.missed} of ${s.attendance.marked} practices in the last 30 days (${s.attendance.rate}% attendance).`).join("\n") : "Nobody has missed more than three practices in the last 30 days.", athletes: m.map((s) => s.id), missing: null }; }
+    const ev = ["vault", "bars", "beam", "floor"].find((e) => q.includes(e));
+    if (ev && /improv|most|best/.test(q)) { const E = ev[0].toUpperCase() + ev.slice(1); const rows = c.roster.map((r) => { const a = analyze(k.results.filter((x) => x.roster_id === r.id), "Gymnastics").events[E]; const rs = k.results.filter((x) => x.roster_id === r.id).sort((x, y) => (x.meet_date > y.meet_date ? 1 : -1)); const f = rs[0]?.scores[E], l = rs.at(-1)?.scores[E]; return a && f != null ? { r, d: l - f, f, l } : null; }).filter(Boolean).sort((x, y) => y.d - x.d).slice(0, 4);
+      return { answer: `${E} improvement from the first to the latest meet:\n` + rows.map((x) => `- ${x.r.name}: ${x.f.toFixed(3)} → ${x.l.toFixed(3)} (${x.d >= 0 ? "+" : ""}${x.d.toFixed(3)})`).join("\n"), athletes: rows.map((x) => x.r.id), missing: null }; }
+    if (/not improv|haven|plateau|declin/.test(q)) { const m = ss.filter((s) => !s.improving && s.meets >= 3); return { answer: m.map((s) => `- ${s.name}: all-around ${s.trend != null ? (s.trend >= 0 ? "+" : "") + s.trend : "—"} at the last meet${s.weakest ? `; lowest event ${s.weakest}` : ""}`).join("\n") || "Everyone with 3+ meets improved.", athletes: m.map((s) => s.id), missing: null }; }
+    if (/compare/.test(q)) { const r = c.roster.find((x) => q.includes(x.name.split(" ")[0].toLowerCase())) || c.roster[0]; const rs = k.results.filter((x) => x.roster_id === r.id).sort((x, y) => (x.meet_date > y.meet_date ? 1 : -1)).slice(-2);
+      return { answer: `${r.name}: ${rs[0].meet_name} → ${rs[1].meet_name}\n` + Object.keys(rs[1].scores).map((e) => `- ${e}: ${rs[0].scores[e]?.toFixed(3)} → ${rs[1].scores[e]?.toFixed(3)} (${(rs[1].scores[e] - rs[0].scores[e] >= 0 ? "+" : "") + (rs[1].scores[e] - rs[0].scores[e]).toFixed(3)})`).join("\n") + `\n- All-around: ${rs[0].aa.toFixed(3)} → ${rs[1].aa.toFixed(3)}`, athletes: [r.id], missing: null }; }
+    const att = ss.map((s) => ({ ...s, why: why(s) })).filter((s) => s.why.some((w) => !/evaluat/.test(w)));
+    return { answer: "This week, focus on:\n" + att.map((s) => `- ${s.name} (${s.level}): ${s.why.join("; ")}`).join("\n"), athletes: att.map((s) => s.id), missing: `${ss.filter((s) => !s.last_eval).length} athletes have no evaluation yet — evaluations make these answers sharper.` };
+  }
+  if (path === "coach/ambassador") return { code: DEMO_CLUB.code, families: 23, paying: 9, trialing: 6, rate: 0.1 };
+  if (path === "coach/family") {
+    const g = (d.gymnasts || []).find((x) => x.id === b.gymnast); const rid = g && (g.name === "Maya" ? "r0" : g.name === "Arjun" ? "r1" : null); if (!rid) return { linked: false };
+    const r = c.roster.find((x) => x.id === rid), rs = k.results.filter((x) => x.roster_id === rid).sort((x, y) => (x.meet_date > y.meet_date ? 1 : -1));
+    return { linked: true, gym: DEMO_CLUB.name, events: eventsFor("Gymnastics", r.gender), results: rs, analysis: analyze(rs, "Gymnastics"),
+      feedback: k.notes.filter((n) => n.roster_id === rid && n.visibility === "parent" && n.status === "published").sort((x, y) => (x.created_at > y.created_at ? -1 : 1)).map((n) => ({ ...n, date: n.created_at.slice(0, 10) })) };
+  }
+  return null;
+}

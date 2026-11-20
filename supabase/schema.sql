@@ -884,3 +884,48 @@ do $$ begin
       on conflict (id) do nothing;
   end if;
 end $$;
+
+-- ---------- v20: Coach OS — attendance, results history, notes/evaluations/plans/reports ----------
+create table if not exists public.coach_attendance (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  roster_id uuid not null references public.club_roster(id) on delete cascade,
+  day date not null,
+  status text not null check (status in ('present','absent','late','excused')),
+  created_at timestamptz not null default now(),
+  unique (roster_id, day)
+);
+create index if not exists coach_attendance_club_day on public.coach_attendance(club_id, day);
+alter table public.coach_attendance enable row level security;
+
+create table if not exists public.coach_results (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  roster_id uuid not null references public.club_roster(id) on delete cascade,
+  meet_name text not null check (char_length(meet_name) <= 120),
+  meet_date date not null,
+  level text check (level is null or char_length(level) <= 40),
+  scores jsonb not null default '{}',
+  aa numeric(8,3), place int,
+  source text not null default 'manual' check (source in ('manual','scorecard')),
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  unique (roster_id, meet_name, meet_date)
+);
+create index if not exists coach_results_club on public.coach_results(club_id);
+alter table public.coach_results enable row level security;
+
+create table if not exists public.coach_feedback (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  roster_id uuid not null references public.club_roster(id) on delete cascade,
+  author_id uuid references auth.users(id) on delete set null,
+  kind text not null check (kind in ('note','evaluation','plan','report')),
+  visibility text not null default 'private' check (visibility in ('private','staff','parent')),
+  status text not null default 'draft' check (status in ('draft','published','archived')),
+  body text check (body is null or char_length(body) <= 4000),
+  ratings jsonb, strengths text, weaknesses text, next_steps text, plan jsonb,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(), published_at timestamptz
+);
+create index if not exists coach_feedback_roster on public.coach_feedback(roster_id);
+create index if not exists coach_feedback_club on public.coach_feedback(club_id);
+alter table public.coach_feedback enable row level security;

@@ -324,7 +324,7 @@ function Main({ session, nav }) {
         ) : gymnast ? <span className="who"><Avatar src={gymnast.photo} name={gymnast.name} size={26} />{gymnast.name}</span> : <span className="grow" />}
         <button className="bell" aria-label={`Alerts (${alerts.length})`} onClick={() => setShowAlerts(true)}>🔔{alerts.length > 0 && <span className="badge">{alerts.length}</span>}</button>
         <button className="me-btn" onClick={() => setMeMenu(true)} aria-label="Account and log out"><Avatar src={profile.avatar} name={profile.full_name || profile.username || "Me"} size={32} /></button>
-        {DEMO && <a className="demo-tag" href="/?demo=gym" onClick={(e) => demoRole(e, "gym")} title="See the demo as a gym owner">Demo<span className="hide-sm"> · gym view</span> ›</a>}
+        {DEMO && <a className="demo-tag" href="/?demo=gym" onClick={(e) => demoRole(e, "gym")} title="See the demo as a coach">Demo<span className="hide-sm"> · coach view</span> ›</a>}
       </header>
       <nav className="sidebar" aria-label="Main">
         <Logo />
@@ -476,10 +476,10 @@ function GymShell({ profile, me, session, refresh, page, setPage, goBack, banner
     const sp = new URLSearchParams(location.search), pg = sp.get("page"), tab = sp.get("tab");
     if (pg === "events" || pg === "messages" || tab) { history.replaceState(null, "", location.pathname); setPage({ name: pg === "events" ? "events" : "home", params: pg === "messages" || tab ? { tab: tab || "messages", t: Date.now() } : null }); }
   }, []);
-  const nav = [["home", "My gym", "⌂"], ["events", "Tickets", "🎟"], ["more", "Account", "≡"]];
+  const nav = [["home", "Coach", "⌂"], ["events", "Tickets", "🎟"], ["more", "Account", "≡"]];
   return (
     <div className="app">
-      <header className="topbar">{page.name !== "home" ? <button className="back-btn" onClick={goBack} aria-label="Back">‹ <span>Back</span></button> : <Logo small />}<span className="who">{profile.gym_name || "Gym account"}</span><button className="link" onClick={() => logOut()}>Log out</button>{DEMO && <a className="demo-tag" href="/?demo" onClick={(e) => demoRole(e, "1")} title="Switch to the parent demo">Demo<span className="hide-sm"> · parent view</span> ›</a>}</header>
+      <header className="topbar">{page.name !== "home" ? <button className="back-btn" onClick={goBack} aria-label="Back">‹ <span>Back</span></button> : <Logo small />}<span className="who">{profile.gym_name || "Coach account"}</span><button className="link" onClick={() => logOut()}>Log out</button>{DEMO && <a className="demo-tag" href="/?demo" onClick={(e) => demoRole(e, "1")} title="Switch to the parent demo">Demo<span className="hide-sm"> · parent view</span> ›</a>}</header>
       {banner && <div className="banner">{banner}</div>}
       <main className="content"><P key={page.name} {...props} /></main>
       <nav className="tabbar">{nav.map(([k, l, i]) => <button key={k} className={page.name === k || (k === "more" && page.name === "admin") ? "on" : ""} onClick={() => go(k)}><span className="tab-icon" aria-hidden>{i}</span>{l}</button>)}</nav>

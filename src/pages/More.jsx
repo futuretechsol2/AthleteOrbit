@@ -95,7 +95,7 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
           <dt>Name</dt><dd>{profile?.full_name || "—"}</dd>
           <dt>Username</dt><dd>{profile?.username || me?.username || "—"}</dd>
           <dt>Email</dt><dd>{DEMO ? "demo@athleteorbit.app" : session?.user?.email}</dd>
-          <dt>Account type</dt><dd>{gymAcct || profile?.account_type === "gym" ? "Gym owner" : "Parent"}</dd>
+          <dt>Account type</dt><dd>{gymAcct || profile?.account_type === "gym" ? "Coach / gym" : "Parent"}</dd>
         </dl>
         {DEMO && <p className="muted small">Demo mode — data is saved on this device only.</p>}
         <div className="row">
