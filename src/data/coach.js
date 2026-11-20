@@ -20,7 +20,11 @@ export function analyze(results, sport) {
     ev[e] = { best, last, change: prev != null ? Math.round((last - prev) * 1000) / 1000 : null, avg: Math.round(avg * 1000) / 1000, meets: vals.length, pbLast: vals.length > 1 && last === best };
   }
   const tot = rows.map((r) => r.aa ?? totalOf(r.scores, sport)).filter((v) => v != null);
-  const trend = tot.length >= 2 ? Math.round((tot.at(-1) - tot.at(-2)) * 1000) / 1000 : null;
+  // compare totals only between meets with the same events entered (a partial sheet isn't a "drop")
+  const full = rows.filter((r) => (r.aa ?? totalOf(r.scores, sport)) != null);
+  const nEv = (r) => Object.keys(r.scores || {}).length;
+  const comparable = full.length >= 2 && nEv(full.at(-1)) === nEv(full.at(-2));
+  const trend = comparable ? Math.round((tot.at(-1) - tot.at(-2)) * 1000) / 1000 : null;
   // the event furthest below the athlete's own average across events (relative), when she has 2+ meets
   let weakest = null;
   if (!lower && rows.length >= 2) { const avgs = Object.entries(ev).map(([e, x]) => [e, x.avg]); if (avgs.length > 1) weakest = avgs.sort((a, b) => a[1] - b[1])[0][0]; }

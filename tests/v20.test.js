@@ -112,3 +112,8 @@ test("command center: counts, attention list, improved athletes, ambassador numb
   const amb = await call(ROUTES["coach/ambassador"], { method: "GET", token: "coach" });
   assert.deepEqual([amb.json.families, amb.json.paying, amb.json.trialing], [2, 1, 1]);
 });
+
+test("a partial result (fewer events) doesn't count as a drop", () => {
+  const a = analyze([{ meet_date: "2026-10-01", scores: { Floor: 9, Vault: 9, Rings: 9 } }, { meet_date: "2026-11-01", scores: { Floor: 9.1, Vault: 9.2 } }], "Gymnastics");
+  assert.equal(a.trend, null); assert.equal(a.bigDrop, false);
+});
