@@ -25,7 +25,7 @@ export default handler(["GET"], async (req) => {
   return {
     unread_messages: unread, owns_club: owns, last_announcement: lastAnnouncement, web_lookup: canSearchWeb(),
     referral_code: profile.referral_code || null, referrals,
-    subscription_status: profile.subscription_status, plan: profile.subscription_plan, username: profile.username, account_type: profile.account_type, gym_name: profile.gym_name, current_period_end: profile.current_period_end,
+    subscription_status: profile.subscription_status, plan: profile.subscription_plan, username: profile.username, account_type: profile.account_type, gym_name: profile.gym_name, organizer_plan: profile.organizer_plan === "pro" && (!profile.organizer_pro_until || profile.organizer_pro_until > new Date().toISOString()) ? "pro" : "free", current_period_end: profile.current_period_end,
     pro: isPaid(profile), tier: tierOf(profile), subscription_tier: profile.subscription_tier || null, trial: trialActive(profile), trial_ends_at: profile.trial_ends_at || null, club: profile._club ? { name: profile._club.name, active_until: profile._club.active_until } : null,
     admin: isAdmin(user, profile), email_enabled: emailEnabled(), sms_enabled: smsEnabled(), limits: DAILY_LIMITS,
   };

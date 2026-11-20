@@ -110,7 +110,7 @@ test("command center: counts, attention list, improved athletes, ambassador numb
   assert.equal(d.json.improved[0].id, "maya");
   assert.equal(d.json.attendance.rate14, 50);
   const amb = await call(ROUTES["coach/ambassador"], { method: "GET", token: "coach" });
-  assert.deepEqual([amb.json.families, amb.json.paying, amb.json.trialing], [2, 1, 1]);
+  assert.deepEqual([amb.json.families, amb.json.paying, amb.json.trialing], [2, 1, 1]); assert.equal(amb.json.rate, 0.2, "gym owners earn 20%");
 });
 
 test("a partial result (fewer events) doesn't count as a drop", () => {

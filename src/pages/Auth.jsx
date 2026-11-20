@@ -1,3 +1,4 @@
+import { ROLES } from "../data/roles.js";
 import ICON_SVG from "../../public/icon.svg?raw";
 import React, { useEffect, useRef, useState } from "react";
 import { db } from "../lib/db.js";
@@ -105,14 +106,15 @@ export function Register({ nav, initialType = "parent" }) {
     timer.current = setTimeout(() => db.checkUsername(name).then((r) => setU(r && typeof r.available === "boolean" ? r : null)).catch(() => setU(null)), 350);
     return () => clearTimeout(timer.current);
   }, [f.username]);
-  const gym = f.account_type === "gym";
+  const gym = f.account_type !== "parent";
+  const orgLabel = { gym: "Gym or club name", coach: "Team or gym you coach", organizer: "Organization or meet name" }[f.account_type];
   // Point at the exact field that needs fixing (red outline + focus), with a plain message.
   const fail = (field, msg) => { setBad(field); setErr(new Error(msg)); setTimeout(() => document.getElementById(`reg-${field}`)?.focus(), 0); };
   async function submit(e) {
     e.preventDefault(); setErr(null); setBad(null);
     const issues = passwordIssues(f.password);
     if (f.full_name.trim().length < 2) return fail("name", "Enter your full name.");
-    if (gym && f.gym_name.trim().length < 2) return fail("gym", "Enter your gym or club's name.");
+    if (gym && f.gym_name.trim().length < 2) return fail("gym", `Enter your ${orgLabel.toLowerCase()}.`);
     if (!/^[a-z0-9_]{3,20}$/.test(f.username.trim().toLowerCase())) return fail("username", `Username: ${USERNAME_HELP}`);
     if (u && u.available === false) return fail("username", u.message || "That username is taken. Pick another.");
     if (!EMAIL_OK(f.email)) return fail("email", "Enter a valid email address, like name@example.com.");
@@ -134,12 +136,12 @@ export function Register({ nav, initialType = "parent" }) {
     <AuthShell nav={nav}>
       <form className="card form" onSubmit={submit} noValidate>
         <h2>Create your account</h2>
-        <div className="seg" role="radiogroup" aria-label="Account type">
-          <button type="button" role="radio" aria-checked={!gym} className={!gym ? "on" : ""} onClick={() => setF({ ...f, account_type: "parent" })}>I'm a parent</button>
-          <button type="button" role="radio" aria-checked={gym} className={gym ? "on" : ""} onClick={() => setF({ ...f, account_type: "gym" })}>I run a gym</button>
+        <p className="small"><b>I am a…</b></p>
+        <div className="role-pick" role="radiogroup" aria-label="Account type">
+          {ROLES.map((r) => <button type="button" key={r.key} role="radio" aria-checked={f.account_type === r.key} className={f.account_type === r.key ? "on" : ""} onClick={() => setF({ ...f, account_type: r.key })}><span className="ri" aria-hidden>{r.icon}</span><b>{r.label}</b><small>{r.blurb}</small></button>)}
         </div>
         <Field label="Your full name"><input id="reg-name" {...inv("name")} value={f.full_name} onChange={set("full_name")} autoComplete="name" maxLength={80} placeholder="Jordan Smith" required /></Field>
-        {gym && <Field label="Gym or club name"><input id="reg-gym" {...inv("gym")} value={f.gym_name} onChange={set("gym_name")} placeholder="Axcelerate Gymnastics" maxLength={80} required /></Field>}
+        {gym && <Field label={orgLabel}><input id="reg-gym" {...inv("gym")} value={f.gym_name} onChange={set("gym_name")} placeholder={f.account_type === "organizer" ? "Queen City Classic" : "Axcelerate Gymnastics"} maxLength={80} required /></Field>}
         <Field label="Username">
           <input id="reg-username" {...inv("username")} value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.toLowerCase() })} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={20} placeholder="jordan_smith" required />
           {u ? <span className={`field-hint ${u.available ? "ok-text" : "warn-text"}`} role="status">{u.available ? "✓ Available" : u.message}</span> : null}

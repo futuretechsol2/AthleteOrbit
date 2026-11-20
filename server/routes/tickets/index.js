@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import crypto from "node:crypto";
 import { cleanListing } from "../admin/listings.js";
 import { isAdmin } from "../admin/support.js";
+import { runsMeets, isBusiness } from "../../../src/data/roles.js";
 import { handler, readJson, requireUser, deps, env, HttpError, sendEmail, emailLayout, esc, signToken, checkToken, todayIn, connectError, dbError, callClaude, canSearchWeb, WEB_SEARCH, extractJson } from "../../lib.js";
 const safe = async (fn) => { try { return await fn(); } catch (e) { throw connectError(e); } };
 
@@ -258,7 +259,7 @@ export const organizer = handler(["GET", "POST"], async (req) => {
   if (req.method === "POST") {
     const b = await readJson(req);
     // Parents buy tickets; gyms and meet organizers sell them.
-    if (!b.id && profile?.account_type !== "gym" && !isAdmin(user, profile)) throw Object.assign(new HttpError(403, "Selling tickets is for gym and meet-organizer accounts. Parents can buy tickets from the event's link."), { code: "organizer_only" });
+    if (!b.id && !runsMeets(profile) && !isAdmin(user, profile)) throw Object.assign(new HttpError(403, "Selling tickets is for gym and meet-organizer accounts. Parents can buy tickets from the event's link."), { code: "organizer_only" });
     const rec = cleanListing({ ...b, platform_pct: 0, buyer_fee_cents: 150, organizer_email: b.organizer_email || user.email, organizer_name: b.organizer_name || profile.gym_name || profile.full_name });
     rec.platform_pct = 0; rec.buyer_fee_cents = Number(process.env.TICKET_FEE_CENTS || 150);
     const existing = b.id ? await ownListing(user.id, b.id) : null;
@@ -362,7 +363,7 @@ export const gymSearch = handler(["GET"], async (req) => {
   const q = (sp.get("q") || "").trim();
   if (sp.get("web") === "1") {
     if (q.length < 3) return { online: [] };
-    if (profile?.account_type !== "gym" && !isAdmin(user, profile)) throw new HttpError(403, "Online gym search is for gym and organizer accounts.");
+    if (!isBusiness(profile) && !isAdmin(user, profile)) throw new HttpError(403, "Online gym search is for gym and organizer accounts.");
     if (!canSearchWeb()) return { online: [], unavailable: true };
     const near = (sp.get("near") || "").slice(0, 60);
     const text = await callClaude({ system: GYM_LOOKUP, maxTokens: 700, tools: [WEB_SEARCH], messages: [{ role: "user", content: `Gym name typed: ${q.slice(0, 80)}${near ? `\nRegion: ${near}` : ""}` }] }).catch(() => "");

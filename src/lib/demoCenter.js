@@ -321,3 +321,135 @@ export function demoCoach(path, body, d, save) {
   }
   return null;
 }
+
+// ---------- Gym business + skills + practice + meet organizer demo ----------
+import { skillsForChild } from "../data/sports.js";
+const DAYS_D = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const did = () => `x${Math.random().toString(36).slice(2, 10)}`;
+function seedBiz(c) {
+  if (c.biz) return c.biz;
+  const r = (n) => c.roster.find((x) => x.name.startsWith(n))?.id;
+  const classes = [
+    { id: "cl1", name: "Level 4 team", level: "Level 4", days: ["Mon", "Wed", "Fri"], start_time: "16:00", end_time: "19:00", coach_name: "Coach Dana", capacity: 3, monthly_fee_cents: 18500 },
+    { id: "cl2", name: "Level 5 team", level: "Level 5", days: ["Mon", "Wed", "Fri"], start_time: "16:00", end_time: "19:30", coach_name: "Coach Jen", capacity: 4, monthly_fee_cents: 20500 },
+    { id: "cl3", name: "Optionals (L6–9)", level: null, days: ["Tue", "Thu", "Sat"], start_time: "15:30", end_time: "19:30", coach_name: "Coach Mike", capacity: 6, monthly_fee_cents: 26500 },
+    { id: "cl4", name: "Rec tumbling (ages 6–9)", level: null, days: ["Sat"], start_time: "09:00", end_time: "10:00", coach_name: "Coach Alex", capacity: 10, monthly_fee_cents: 9500 }];
+  const enroll = [["cl1", "Ella", "enrolled"], ["cl1", "Ruby", "enrolled"], ["cl1", "Liam", "enrolled"], ["cl1", "Harper", "waitlist"], ["cl2", "Maya", "enrolled"], ["cl2", "Sofia", "enrolled"], ["cl2", "Ethan", "enrolled"], ["cl3", "Arjun", "enrolled"], ["cl3", "Noah", "enrolled"], ["cl3", "Chloe", "enrolled"], ["cl3", "Grace", "enrolled"]].map(([cl, n, status], i) => ({ class_id: cl, roster_id: r(n), status, at: i }));
+  const staff = [{ id: "s1", name: "Coach Dana", role: "Head coach", pay_rate_cents: 2800 }, { id: "s2", name: "Coach Jen", role: "Coach", pay_rate_cents: 2200 }, { id: "s3", name: "Coach Mike", role: "Optionals coach", pay_rate_cents: 2600 }, { id: "s4", name: "Sam Ruiz", role: "Front desk", pay_rate_cents: 1500 }];
+  const mon = (() => { const x = new Date(); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.toISOString().slice(0, 10); })();
+  const plus = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const shifts = []; [[0, 2, 4]].forEach(() => {});
+  for (const k of [0, 2, 4]) { shifts.push({ id: did(), staff_id: "s1", day: plus(mon, k), start_time: "15:30", end_time: "19:30", class_id: "cl1" }); shifts.push({ id: did(), staff_id: "s2", day: plus(mon, k), start_time: "16:00", end_time: "19:30", class_id: "cl2" }); shifts.push({ id: did(), staff_id: "s4", day: plus(mon, k), start_time: "15:00", end_time: "20:00" }); }
+  for (const k of [1, 3, 5]) shifts.push({ id: did(), staff_id: "s3", day: plus(mon, k), start_time: "15:00", end_time: "19:30", class_id: "cl3" });
+  const month = (o) => { const x = new Date(); x.setDate(1); x.setMonth(x.getMonth() + o); return x.toISOString().slice(0, 10); };
+  const inv = [];
+  for (const [o, label] of [[-3, "August"], [-2, "September"], [-1, "October"], [0, "November"]]) for (const e of enroll.filter((x) => x.status === "enrolled")) {
+    const cl = classes.find((x) => x.id === e.class_id), ro = c.roster.find((x) => x.id === e.roster_id);
+    const paid = o < 0 ? hash(ro.id + o) % 9 !== 0 : hash(ro.id) % 3 === 0;
+    inv.push({ id: did(), roster_id: ro.id, athlete_name: ro.name, family_email: `${ro.name.split(" ")[1].toLowerCase()}.family@example.com`, description: `${label} tuition — ${cl.name}`, amount_cents: cl.monthly_fee_cents, due_date: plus(month(o), 4), status: paid ? "paid" : "open", paid_at: paid ? `${plus(month(o), 2 + (hash(ro.id) % 5))}T15:00:00Z` : null, paid_via: paid ? ["card", "card", "card", "cash", "check"][hash(ro.id + o) % 5] : null, created_at: `${month(o)}T12:00:00Z` });
+  }
+  const skills = {}; const sk = (n, list) => { const id = r(n); skills[id] = list; };
+  const plans = [{ id: "p1", title: "Tue/Thu Optionals — template", is_template: true, group_name: "Optionals", objectives: "Release moves, beam connections", blocks: [{ minutes: 15, station: "Warm-up & flexibility", drills: "Jog, dynamic stretch, splits" }, { minutes: 35, station: "Bars", drills: "Kip cast handstands x10, release drills on pit bar" }, { minutes: 35, station: "Beam", drills: "Series on low beam, 3-in-a-row challenge" }, { minutes: 20, station: "Conditioning", drills: "Rope climbs, V-ups, handstand holds" }], done: false, day: null },
+    { id: "p2", title: "Monday — Level 4 team", is_template: false, day: dayOff(-4), group_name: "Level 4", objectives: "Bars kips, vault run speed", blocks: [{ minutes: 15, station: "Warm-up", drills: "Jog, stretch", done: true }, { minutes: 40, station: "Bars", drills: "Glide swings, kip drills", done: true }, { minutes: 30, station: "Vault", drills: "Sprint + hurdle, handspring onto mats", done: true }, { minutes: 20, station: "Conditioning", drills: "Cast drills on floor bar", done: false }] }];
+  return (c.biz = { classes, enroll, staff, shifts, inv, skills, plans, online: false });
+}
+export function demoBiz(path, body, d, save) {
+  const c = center(d), z = seedBiz(c), b = body || {}, done = (o) => { save(d); return o; }, today = dayOff(0);
+  const cls = () => z.classes.map((x) => { const e = z.enroll.filter((y) => y.class_id === x.id).sort((p, q) => p.at - q.at); const nm = (y) => { const ro = c.roster.find((q) => q.id === y.roster_id); return { roster_id: y.roster_id, name: ro?.name, level: ro?.level }; }; return { ...x, enrolled: e.filter((y) => y.status === "enrolled").map(nm), waitlist: e.filter((y) => y.status === "waitlist").map(nm) }; });
+  if (path === "gym/classes") {
+    if (b.enroll) { const n = z.enroll.filter((y) => y.class_id === b.class_id && y.status === "enrolled").length, cap = z.classes.find((x) => x.id === b.class_id).capacity; const status = n < cap ? "enrolled" : "waitlist"; z.enroll.push({ class_id: b.class_id, roster_id: b.enroll, status, at: Date.now() }); return done({ status }); }
+    if (b.drop) { const was = z.enroll.find((y) => y.class_id === b.class_id && y.roster_id === b.drop); z.enroll = z.enroll.filter((y) => y !== was); let promoted = []; if (was?.status === "enrolled") { const w = z.enroll.filter((y) => y.class_id === b.class_id && y.status === "waitlist").sort((p, q) => p.at - q.at)[0]; if (w) { w.status = "enrolled"; promoted = [w.roster_id]; } } return done({ dropped: true, promoted }); }
+    if (b.remove) { z.classes = z.classes.filter((x) => x.id !== b.remove); return done({ removed: true }); }
+    if (b.name) { const rec = { name: b.name, level: b.level, days: b.days || [], start_time: b.start_time, end_time: b.end_time, coach_name: b.coach_name, capacity: Number(b.capacity) || 12, monthly_fee_cents: b.monthly_fee_cents }; if (b.id) Object.assign(z.classes.find((x) => x.id === b.id), rec); else z.classes.push({ id: did(), ...rec }); return done({ saved: true }); }
+    return { classes: cls().sort((p, q) => DAYS_D.indexOf(p.days[0]) - DAYS_D.indexOf(q.days[0])), roster: c.roster.map((x) => ({ id: x.id, name: x.name, level: x.level })) };
+  }
+  if (path === "gym/staff") {
+    if (b.remove_shift) { z.shifts = z.shifts.filter((x) => x.id !== b.remove_shift); return done({ removed: true }); }
+    if (b.remove_staff) { z.staff = z.staff.filter((x) => x.id !== b.remove_staff); return done({ removed: true }); }
+    if (b.shift) { const m = (t) => { const [h, mm] = t.split(":").map(Number); return h * 60 + mm; }; const clash = z.shifts.find((x) => x.staff_id === b.shift.staff_id && x.day === b.shift.day && m(x.start_time) < m(b.shift.end_time) && m(b.shift.start_time) < m(x.end_time)); if (clash) throw Object.assign(new Error(`They're already scheduled ${clash.start_time}–${clash.end_time} that day.`), { status: 409 }); z.shifts.push({ id: did(), ...b.shift }); return done({ saved: true }); }
+    if (b.name) { if (b.id) Object.assign(z.staff.find((x) => x.id === b.id), b); else z.staff.push({ id: did(), ...b }); return done({ saved: true }); }
+    const wk = (() => { const x = new Date(`${b.week || today}T12:00:00Z`); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); return x.toISOString().slice(0, 10); })();
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => { const x = new Date(`${wk}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + i); return x.toISOString().slice(0, 10); });
+    const sh = z.shifts.filter((x) => days.includes(x.day)); const mins = (t) => { const [h, mm] = t.split(":").map(Number); return h * 60 + mm; };
+    return { week: wk, days, shifts: sh, classes: z.classes.map(({ id, name }) => ({ id, name })), staff: z.staff.map((p) => { const h = sh.filter((x) => x.staff_id === p.id).reduce((a, x) => a + (mins(x.end_time) - mins(x.start_time)) / 60, 0); return { ...p, hours: Math.round(h * 10) / 10, pay_cents: p.pay_rate_cents ? Math.round(h * p.pay_rate_cents) : null }; }) };
+  }
+  if (path === "gym/invoices") {
+    if (b.mark) { const i = z.inv.find((x) => x.id === b.mark); Object.assign(i, b.status === "void" ? { status: "void" } : b.status === "open" ? { status: "open", paid_at: null, paid_via: null } : { status: "paid", paid_at: new Date().toISOString(), paid_via: b.via }); return done({ saved: true }); }
+    if (b.remind) return { reminded: z.inv.filter((i) => i.status === "open" && i.due_date < today).length };
+    if (b.description) { let rs = c.roster; if (b.roster_id) rs = rs.filter((x) => x.id === b.roster_id); else if (b.level) rs = rs.filter((x) => x.level === b.level); else if (b.class_id) { const ids = z.enroll.filter((y) => y.class_id === b.class_id && y.status === "enrolled").map((y) => y.roster_id); rs = rs.filter((x) => ids.includes(x.id)); }
+      for (const ro of rs) z.inv.unshift({ id: did(), roster_id: ro.id, athlete_name: ro.name, family_email: `${ro.name.split(" ")[1].toLowerCase()}.family@example.com`, description: b.description, amount_cents: b.amount_cents, due_date: b.due_date, status: "open", created_at: new Date().toISOString() }); return done({ created: rs.length, emailed: rs.length, missingEmail: [] }); }
+    const list = [...z.inv].sort((p, q) => (p.created_at > q.created_at ? -1 : 1));
+    return { invoices: list, online: z.online, fee_pct: 1, totals: { open: list.filter((i) => i.status === "open").reduce((a, i) => a + i.amount_cents, 0), overdue: list.filter((i) => i.status === "open" && i.due_date < today).reduce((a, i) => a + i.amount_cents, 0), collected30: list.filter((i) => i.status === "paid" && i.paid_at >= dayOff(-30)).reduce((a, i) => a + i.amount_cents, 0) } };
+  }
+  if (path === "gym/connect") { z.online = true; return done({ ready: true }); }
+  if (path === "gym/reports") {
+    const months = [...Array(6)].map((_, i) => { const x = new Date(); x.setDate(1); x.setMonth(x.getMonth() - (5 - i)); return x.toISOString().slice(0, 7); });
+    const L = z.inv.filter((i) => i.status !== "void"), open = L.filter((i) => i.status === "open"), age = (i) => Math.floor((Date.parse(today) - Date.parse(i.due_date)) / 864e5);
+    const k = seedCoach(c);
+    return { finance: { months: months.map((m) => ({ month: m, billed: L.filter((i) => i.created_at.startsWith(m)).reduce((a, i) => a + i.amount_cents, 0), collected: L.filter((i) => i.status === "paid" && i.paid_at.startsWith(m)).reduce((a, i) => a + i.amount_cents, 0) })), outstanding: open.reduce((a, i) => a + i.amount_cents, 0),
+      aging: { current: open.filter((i) => age(i) <= 0).reduce((a, i) => a + i.amount_cents, 0), d30: open.filter((i) => age(i) > 0 && age(i) <= 30).reduce((a, i) => a + i.amount_cents, 0), d60: open.filter((i) => age(i) > 30 && age(i) <= 60).reduce((a, i) => a + i.amount_cents, 0), d60plus: open.filter((i) => age(i) > 60).reduce((a, i) => a + i.amount_cents, 0) },
+      byMethod: ["card", "cash", "check", "other"].map((m) => ({ method: m, cents: L.filter((i) => i.status === "paid" && i.paid_via === m).reduce((a, i) => a + i.amount_cents, 0) })), platformFees: 0 },
+      enrollment: cls().map((x) => ({ id: x.id, name: x.name, capacity: x.capacity, enrolled: x.enrolled.length, waitlist: x.waitlist.length, fill: Math.round((x.enrolled.length / x.capacity) * 100), monthly_cents: x.monthly_fee_cents * x.enrolled.length })),
+      athletes: [...new Set(c.roster.map((x) => x.level))].sort((p, q) => p.localeCompare(q, undefined, { numeric: true })).map((lv) => { const ids = c.roster.filter((x) => x.level === lv).map((x) => x.id); const a = k.attendance.filter((x) => ids.includes(x.roster_id) && x.day >= dayOff(-30) && x.status !== "excused"); const s = ids.flatMap((id) => Object.values(z.skills[id] || {}));
+        return { level: lv, athletes: ids.length, attendance: a.length ? Math.round((a.filter((x) => x.status !== "absent").length / a.length) * 100) : null, skills: { learning: s.filter((x) => x === "learning").length, consistent: s.filter((x) => x === "consistent").length, competition: s.filter((x) => x === "competition").length } }; }) };
+  }
+  if (path === "gym/email") { const rs = b.level ? c.roster.filter((x) => x.level === b.level) : b.class_id ? z.enroll.filter((y) => y.class_id === b.class_id) : c.roster; return { recipients: rs.length, sent: b.preview ? 0 : rs.length }; }
+  if (path === "coach/skills") {
+    const childOf = (r) => ({ sport: "Gymnastics", program: r.program, level: r.level });
+    if (b.roster_id) { (z.skills[b.roster_id] ||= {}); if (b.status) z.skills[b.roster_id][b.skill] = b.status; else delete z.skills[b.roster_id][b.skill]; return done({ saved: true }); }
+    const who = b.roster ? c.roster.filter((x) => x.id === b.roster) : b.level ? c.roster.filter((x) => x.level === b.level) : c.roster;
+    // seed some realistic progress the first time a level is opened
+    for (const r of who) if (!z.skills[r.id]) { z.skills[r.id] = {}; skillsForChild(childOf(r)).forEach((s, i) => { const h = hash(r.id + s.skill) % 10; if (h < 4) z.skills[r.id][s.skill] = "competition"; else if (h < 7) z.skills[r.id][s.skill] = "consistent"; else if (h < 9) z.skills[r.id][s.skill] = "learning"; }); save(d); }
+    return { levels: [...new Set(c.roster.map((x) => x.level))].sort((p, q) => p.localeCompare(q, undefined, { numeric: true })), athletes: who.map((r) => { const all = skillsForChild(childOf(r)).map(({ event, skill }) => ({ event, skill, status: z.skills[r.id]?.[skill] || null })); return { id: r.id, name: r.name, level: r.level, skills: all, ready: all.length ? Math.round((all.filter((s) => s.status === "competition").length / all.length) * 100) : null }; }) };
+  }
+  if (path === "coach/practice") {
+    if (b.remove) { z.plans = z.plans.filter((x) => x.id !== b.remove); return done({ removed: true }); }
+    if (b.title) { if (b.id) Object.assign(z.plans.find((x) => x.id === b.id), b); else z.plans.push({ ...b, id: did() }); return done({ saved: true }); }
+    return { plans: [...z.plans].sort((p, q) => (p.is_template === q.is_template ? ((q.day || "") > (p.day || "") ? 1 : -1) : p.is_template ? 1 : -1)) };
+  }
+  if (path === "family/billing") { const mine = z.inv.filter((i) => ["Maya", "Arjun"].some((n) => (i.athlete_name || "").startsWith(n))).filter((i) => i.status !== "void").map((i) => ({ id: i.id, gym: DEMO_CLUB.name, athlete: i.athlete_name, description: i.description, amount_cents: i.amount_cents, due_date: i.due_date, status: i.status, paid_at: i.paid_at, payable: true })).sort((p, q) => (p.status === q.status ? 0 : p.status === "open" ? -1 : 1));
+    return { invoices: mine, balance: mine.filter((i) => i.status === "open").reduce((a, i) => a + i.amount_cents, 0) }; }
+  return null;
+}
+
+// Meet organizer demo: one big invitational with entries from 4 gyms.
+function seedOrg(d) {
+  if (d.org) return d.org;
+  const gyms = ["Carolina Flips", "Queen City Flyers", "Tidal Gym", "Carolina Elite"], first = ["Maya", "Ava", "Lily", "Zara", "Ella", "Ruby", "Mila", "Sofia", "Grace", "Chloe", "Harper", "Nora", "Ivy", "Leah", "Emma"], last = ["Patel", "Ruiz", "Kim", "Moore", "Chen", "Stone", "Park", "Diaz", "Hill", "Adams"];
+  const entries = []; let i = 0;
+  for (const g of gyms) for (const lv of ["Level 3", "Level 4", "Level 5"]) for (let k = 0; k < 3 + (hash(g + lv) % 3); k++) { i++; entries.push({ id: `e${i}`, gym_name: g, athlete_name: `${first[(i * 7) % first.length]} ${last[(i * 3) % last.length]}`, level: lv, member_number: i % 11 === 0 ? null : String(1000000 + i * 137), status: i % 4 === 0 ? "pending" : "verified", fee_paid: i % 5 !== 0, division: null }); }
+  entries.push({ ...entries[3], id: "edup" });
+  return (d.org = { entries, sessions: [{ id: "ss1", name: "Session 1", day: dayOff(15), warmup: "7:30 AM", start_time: "8:15 AM", levels: ["Level 3"], rotation: null }, { id: "ss2", name: "Session 2", day: dayOff(15), warmup: "11:45 AM", start_time: "12:30 PM", levels: ["Level 4"], rotation: null }],
+    officials: [{ id: "o1", name: "Pat Morgan", role: "Meet referee", email: "pat@example.com", session_id: null, station: null, confirmed: true }, { id: "o2", name: "Robin Lee", role: "Judge", email: "robin@example.com", session_id: "ss1", station: "Beam", confirmed: true }, { id: "o3", name: "Chris Fox", role: "Judge", email: "chris@example.com", session_id: "ss1", station: "Bars", confirmed: false }, { id: "o4", name: "Taylor Kim", role: "Music", email: "taylor@example.com", session_id: null, station: "Floor", confirmed: true }, { id: "o5", name: "Jordan Bell", role: "Door / tickets", email: null, session_id: null, station: "Front door", confirmed: false }] });
+}
+const OLY = ["Vault", "Bars", "Beam", "Floor"];
+function rotationOf(groups) { const sq = OLY.map(() => []); [...groups].sort((a, b) => b.count - a.count).forEach((g) => { const i = sq.map((s) => s.reduce((n, x) => n + x.count, 0)).reduce((m, v, k, arr) => (v < arr[m] ? k : m), 0); sq[i].push(g); }); return OLY.map((_, r) => ({ round: r + 1, stations: OLY.map((ev, k) => { const s = sq[(k - r + 16) % 4]; return { event: ev, squad: s.map((g) => g.name), athletes: s.reduce((n, g) => n + g.count, 0) }; }) })); }
+export function demoOrg(path, body, d, save) {
+  const o = seedOrg(d), b = body || {}, done = (x) => { save(d); return x; }, pro = !!d.orgPro;
+  if (path === "org/plan") { if (b && Object.keys(b).length === 0 && !("id" in b)) return { plan: pro ? "pro" : "free", until: null, price_cents: 19900, free_entries: 50 }; return { plan: pro ? "pro" : "free", until: null, price_cents: 19900, free_entries: 50 }; }
+  if (path === "org/entries") {
+    if (b.rows) { for (const r of b.rows) o.entries.push({ id: did(), status: "pending", fee_paid: false, ...r }); return done({ added: b.rows.length }); }
+    if (b.verifyAll) { let n = 0; for (const e of o.entries) if (e.status === "pending" && e.level) { e.status = "verified"; n++; } return done({ verified: n }); }
+    if (b.set) { Object.assign(o.entries.find((e) => e.id === b.set), Object.fromEntries(Object.entries(b).filter(([k]) => ["status", "fee_paid"].includes(k)))); return done({ saved: true }); }
+    const key = (e) => `${e.athlete_name.toLowerCase()}|${e.gym_name.toLowerCase()}`, cnt = new Map(); o.entries.forEach((e) => cnt.set(key(e), (cnt.get(key(e)) || 0) + 1));
+    const list = [...o.entries].sort((a, x) => a.gym_name.localeCompare(x.gym_name) || a.athlete_name.localeCompare(x.athlete_name)), live = list.filter((e) => e.status !== "scratched");
+    return { entries: list.map((e) => ({ ...e, duplicate: cnt.get(key(e)) > 1, missing: [!e.level && "level", !e.member_number && "member #"].filter(Boolean) })), gyms: [...new Set(list.map((e) => e.gym_name))].map((g) => ({ gym: g, athletes: live.filter((e) => e.gym_name === g).length })),
+      counts: { total: live.length, verified: live.filter((e) => e.status === "verified").length, pending: live.filter((e) => e.status === "pending").length, scratched: list.length - live.length }, plan: pro ? "pro" : "free", limit: pro ? null : 50 };
+  }
+  if (path === "org/sessions") {
+    if (b.rotate) { const s = o.sessions.find((x) => x.id === b.rotate), es = o.entries.filter((e) => e.status !== "scratched" && s.levels.includes(e.level)); const groups = [...new Set(es.map((e) => `${e.gym_name} · ${e.level}`))].map((name) => ({ name, count: es.filter((e) => `${e.gym_name} · ${e.level}` === name).length })); s.rotation = rotationOf(groups); return done({ rotation: s.rotation }); }
+    if (b.remove) { o.sessions = o.sessions.filter((x) => x.id !== b.remove); return done({ removed: true }); }
+    if (b.name) { const rec = { name: b.name, day: b.day, warmup: b.warmup, start_time: b.start_time, levels: b.levels || [] }; if (b.session) Object.assign(o.sessions.find((x) => x.id === b.session), rec); else o.sessions.push({ id: did(), rotation: null, ...rec }); return done({ saved: true }); }
+    const live = o.entries.filter((e) => e.status !== "scratched"), levels = [...new Set(live.map((e) => e.level).filter(Boolean))].sort();
+    return { sessions: o.sessions.map((s) => ({ ...s, athletes: live.filter((e) => s.levels.includes(e.level)).length })), levels, unassigned: levels.filter((lv) => !o.sessions.some((s) => s.levels.includes(lv))), pro };
+  }
+  if (path === "org/officials") {
+    if (b.notify) return { sent: o.officials.filter((x) => x.email).length };
+    if (b.remove) { o.officials = o.officials.filter((x) => x.id !== b.remove); return done({ removed: true }); }
+    if (b.name) { const rec = { name: b.name, email: b.email, phone: b.phone, role: b.role, session_id: b.session_id || null, station: b.station, confirmed: !!b.confirmed }; if (b.official) Object.assign(o.officials.find((x) => x.id === b.official), rec); else o.officials.push({ id: did(), ...rec }); return done({ saved: true }); }
+    const roles = [...new Set(o.officials.map((x) => x.role))];
+    return { officials: o.officials, sessions: o.sessions.map(({ id, name, day, start_time }) => ({ id, name, day, start_time })), byRole: roles.map((r) => ({ role: r, count: o.officials.filter((x) => x.role === r).length, confirmed: o.officials.filter((x) => x.role === r && x.confirmed).length })) };
+  }
+  if (path === "org/announce") return { posted: true, sent: 0 };
+  return null;
+}

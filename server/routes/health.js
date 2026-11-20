@@ -32,7 +32,7 @@ export default handler(["GET"], async () => {
       const i = await sb.from("meet_rsvps").select("id").limit(1);
       const j = await sb.from("club_meets").select("fee_cents,fee_due").limit(1);
       const k = await sb.from("floor_music").select("id").limit(1);
-      const co = await Promise.all(["coach_attendance", "coach_results", "coach_feedback"].map((t) => sb.from(t).select("id").limit(1)));
+      const co = await Promise.all(["coach_attendance", "coach_results", "coach_feedback", "gym_classes", "gym_invoices", "coach_skills", "practice_plans", "meet_entries", "meet_sessions", "meet_officials"].map((t) => sb.from(t).select("id").limit(1)));
       checks.schemaUpToDate = !b.error && !c.error && !d.error && !e.error && !f.error && !g.error && !h.error && !i.error && !j.error && !k.error && co.every((x) => !x.error);
       if (!checks.schemaUpToDate) checks.schemaFix = "Supabase → SQL Editor → paste supabase/schema.sql → Run";
       const st = await sb.storage.from("photos").createSignedUrls(["health-check.jpg"], 60).catch(() => ({ error: true }));

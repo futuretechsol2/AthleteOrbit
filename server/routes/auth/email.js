@@ -35,8 +35,8 @@ export const register = handler(["POST"], async (req) => {
   const { data: taken } = await sb.from("profiles").select("id,email").eq("username", username).maybeSingle();
   // Their own earlier (unconfirmed) sign-up holding this username doesn't count as "taken".
   if (taken && String(taken.email || "").toLowerCase() !== email) throw new HttpError(409, "That username is taken. Please pick another.");
-  const gym = b.account_type === "gym";
-  const data = { username, full_name, account_type: gym ? "gym" : "parent", gym_name: gym ? String(b.gym_name || "").trim().slice(0, 80) || null : null, terms_accepted_at: deps.now().toISOString(),
+  const gym = ["gym", "coach", "organizer"].includes(b.account_type);
+  const data = { username, full_name, account_type: gym ? b.account_type : "parent", gym_name: gym ? String(b.gym_name || "").trim().slice(0, 80) || null : null, terms_accepted_at: deps.now().toISOString(),
     ...(b.ref ? { ref: String(b.ref).slice(0, 12) } : {}), ...(b.source ? { source: String(b.source).slice(0, 120) } : {}) };
   if (b.adult !== true) throw new HttpError(400, "Please confirm you're 18 or older.");
   const { data: out, error } = await sb.auth.admin.generateLink({ type: "signup", email, password, options: { data } });

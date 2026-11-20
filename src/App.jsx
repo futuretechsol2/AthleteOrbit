@@ -28,7 +28,10 @@ import PlanPicker, { TierPicker, SimplePlans } from "./components/PlanPicker.jsx
 import { Login, Register, NewPassword, Logo } from "./pages/Auth.jsx";
 import Landing from "./pages/Landing.jsx";
 import Flyer from "./pages/Flyer.jsx";
-import GymOwner from "./pages/GymOwner.jsx";
+import GymOwner, { tabsFor } from "./pages/GymOwner.jsx";
+import { OrganizerShell } from "./pages/Organizer.jsx";
+import { ParentBilling } from "./pages/GymBusiness.jsx";
+import { runsTeam, runsMeets, roleOf, roleLabel } from "./data/roles.js";
 import Admin from "./pages/Admin.jsx";
 import { TicketPage, MyTickets, DoorPage } from "./pages/Tickets.jsx";
 
@@ -129,7 +132,7 @@ export default function App() {
   if (recovery) return <NewPassword onDone={() => setRecovery(false)} />;
   if (!session || (DEMO && (route === "/login" || route === "/register"))) {
     if (route === "/login") return <Login nav={nav} />;
-    if (route === "/register") return <Register nav={nav} initialType={query.get("type") === "gym" ? "gym" : "parent"} />;
+    if (route === "/register") return <Register nav={nav} initialType={["gym", "coach", "organizer"].includes(query.get("type")) ? query.get("type") : "parent"} />;
     return NATIVE ? <Login nav={nav} /> : <Landing nav={nav} />;
   }
   return <Main session={session} nav={nav} />;
@@ -192,10 +195,10 @@ function Main({ session, nav }) {
     const sp = new URLSearchParams(location.search);
     const meet = sp.get("meet"), inbox = sp.get("inbox"), club = sp.get("club"), pg = sp.get("page");
     // Deep links from emails and the feature tour: ?page=coach&tab=nutrition, ?page=meets&snap=1, ?page=more&add=1
-    if (["costs", "meets", "scores", "gym", "photos", "events", "coach", "more", "skills"].includes(pg) || pg === "messages") {
-      const tab = sp.get("tab"), snap = sp.has("snap"), add = sp.has("add");
+    if (["costs", "meets", "scores", "gym", "photos", "events", "coach", "more", "skills", "billing"].includes(pg) || pg === "messages") {
+      const tab = sp.get("tab"), snap = sp.has("snap"), add = sp.has("add"), paid = sp.has("paid");
       history.replaceState(null, "", location.pathname);
-      setPage({ name: pg === "messages" ? "gym" : pg, params: pg === "gym" || pg === "messages" ? { tab: tab || "messages", t: Date.now() } : tab || snap || add ? { tab: tab || undefined, snap: snap || undefined, add: add || undefined, t: Date.now() } : null });
+      setPage({ name: pg === "messages" ? "gym" : pg, params: pg === "gym" || pg === "messages" ? { tab: tab || "messages", t: Date.now() } : tab || snap || add || paid ? { tab: tab || undefined, snap: snap || undefined, add: add || undefined, paid: paid || undefined, t: Date.now() } : null });
     }
     if (pg === "plans") { history.replaceState(null, "", location.pathname); setPaywall(true); }
     let gym = null; try { gym = localStorage.getItem("gp-gym-code"); } catch {}
@@ -256,7 +259,7 @@ function Main({ session, nav }) {
   useEffect(() => { if (!gymnasts?.length) return; const t = setTimeout(() => { db.list("scores").catch(() => {}); db.list("meets").catch(() => {}); }, 800); return () => clearTimeout(t); }, [gymnasts?.length]);
   // A plan picked on the pricing page opens checkout once the family is set up.
   useEffect(() => {
-    if (!me || !gymnasts?.length || profile?.account_type === "gym") return;
+    if (!me || !gymnasts?.length || roleOf(profile) !== "parent") return;
     if (read("gp-plan") && !me.pro) setPaywall(true);
   }, [me, gymnasts]);
 
@@ -272,7 +275,8 @@ function Main({ session, nav }) {
 
   if (loadErr) return <div className="center-screen"><ErrorNote error={loadErr} /><Button onClick={refresh}>Try again</Button></div>;
   if (!gymnasts || !profile) return <div className="boot"><Logo /></div>;
-  const gymOwner = profile.account_type === "gym" && !gymnasts.length;
+  if (roleOf(profile) === "organizer" && !gymnasts.length) return <OrganizerShell profile={profile} me={me} refresh={refresh} page={page} setPage={setPage} goBack={goBack} banner={banner} Logo={Logo} logOut={logOut} DemoSwitch={DemoSwitch} More={More} Events={Events} />;
+  const gymOwner = runsTeam(profile) && !gymnasts.length;
   if (gymOwner) return <GymShell profile={profile} me={me} session={session} refresh={refresh} page={page} setPage={setPage} goBack={goBack} banner={banner} />;
   // Athlete view (kids): read-only, locked with the parent's PIN on this device.
   const av = athleteViewState();
@@ -304,11 +308,11 @@ function Main({ session, nav }) {
   const familyMode = current === "family" && kids.length > 0 && gymnasts.length > 1 && page.name === "home";
   const gymnast = kids.find((g) => g.id === current) || kids.find((g) => g.id === lastChild) || kids[0];
   const props = { gymnast, gymnasts, kids, sport, profile, paid, tier, can, upgrade, refresh, go, openPaywall, params: page.params, session, me, pickChild: (id) => { const g = gymnasts.find((x) => x.id === id); if (g && sportOf(g) !== sport) { setSportPref(sportOf(g)); store("gp-sport", sportOf(g)); } setCurrent(id); go("home"); } };
-  const FAMILY_WIDE = ["costs", "gym", "admin", "more", "photos", "events"];
+  const FAMILY_WIDE = ["costs", "gym", "admin", "more", "photos", "events", "billing"];
   const needsKid = !gymnast && !familyMode && !FAMILY_WIDE.includes(page.name);
 
-  const P = { home: familyMode ? Family : Home, scores: Results, skills: Progress, coach: Coach, more: More, meets: Meets, costs: Costs, gym: GymPage, admin: Admin, photos: Photos, events: profile.account_type === "gym" || (me?.admin && !DEMO) ? Events : BuyTickets }[page.name] || Home;
-  const navActive = ["costs", "gym", "admin", "photos", "events"].includes(page.name) ? "more" : page.name;
+  const P = { home: familyMode ? Family : Home, scores: Results, skills: Progress, coach: Coach, more: More, meets: Meets, costs: Costs, gym: GymPage, admin: Admin, photos: Photos, billing: ParentBilling, events: runsMeets(profile) || (me?.admin && !DEMO) ? Events : BuyTickets }[page.name] || Home;
+  const navActive = ["costs", "gym", "admin", "photos", "events", "billing"].includes(page.name) ? "more" : page.name;
   const tabs = NAV(S);
 
   return (
@@ -324,7 +328,7 @@ function Main({ session, nav }) {
         ) : gymnast ? <span className="who"><Avatar src={gymnast.photo} name={gymnast.name} size={26} />{gymnast.name}</span> : <span className="grow" />}
         <button className="bell" aria-label={`Alerts (${alerts.length})`} onClick={() => setShowAlerts(true)}>🔔{alerts.length > 0 && <span className="badge">{alerts.length}</span>}</button>
         <button className="me-btn" onClick={() => setMeMenu(true)} aria-label="Account and log out"><Avatar src={profile.avatar} name={profile.full_name || profile.username || "Me"} size={32} /></button>
-        {DEMO && <a className="demo-tag" href="/?demo=gym" onClick={(e) => demoRole(e, "gym")} title="See the demo as a coach">Demo<span className="hide-sm"> · coach view</span> ›</a>}
+        {DEMO && <DemoSwitch current="parent" />}
       </header>
       <nav className="sidebar" aria-label="Main">
         <Logo />
@@ -333,7 +337,8 @@ function Main({ session, nav }) {
         <button onClick={() => go("costs")} className={page.name === "costs" ? "on" : ""}><span aria-hidden>💵</span>Costs & budget</button>
         <button onClick={() => go("gym")} className={page.name === "gym" ? "on" : ""}><span aria-hidden>🏛️</span>My gym{me?.unread_messages ? <span className="badge inline">{me.unread_messages}</span> : null}</button>
         <button onClick={() => go("photos")} className={page.name === "photos" ? "on" : ""}><span aria-hidden>📸</span>Photos & prints</button>
-        <button onClick={() => go("events")} className={page.name === "events" ? "on" : ""}><span aria-hidden>🎟️</span>{profile.account_type === "gym" || (me?.admin && !DEMO) ? "Sell tickets" : "Tickets"}</button>
+        <button onClick={() => go("billing")} className={page.name === "billing" ? "on" : ""}><span aria-hidden>💳</span>Payments</button>
+        <button onClick={() => go("events")} className={page.name === "events" ? "on" : ""}><span aria-hidden>🎟️</span>{runsMeets(profile) || (me?.admin && !DEMO) ? "Sell tickets" : "Tickets"}</button>
         <hr />
         <a className="side-link" href="/live"><span aria-hidden>●</span>Live scores</a>
         <a className="side-link" href="/tour"><span aria-hidden>▶</span>Feature tour</a>
@@ -467,7 +472,8 @@ function AddFirstKid({ S, sport, canAdd, openPaywall, onSaved, page = "home" }) 
   );
 }
 
-// Gym-owner accounts: their gym dashboard, gym posts and account settings.
+// Coach and gym-owner accounts: Coach OS (+ the gym's business tools for owners) with a left sidebar like the
+// parent app on desktop, and a bottom tab bar on phones.
 function GymShell({ profile, me, session, refresh, page, setPage, goBack, banner }) {
   const go = (name, params = null) => setPage({ name, params: params ? { ...params, t: Date.now() } : null });
   const props = { profile, me, session, refresh, go, params: page.params, gymnasts: [], paid: !!me?.pro, openPaywall: () => {}, can: () => true, upgrade: () => {} };
@@ -476,15 +482,35 @@ function GymShell({ profile, me, session, refresh, page, setPage, goBack, banner
     const sp = new URLSearchParams(location.search), pg = sp.get("page"), tab = sp.get("tab");
     if (pg === "events" || pg === "messages" || tab) { history.replaceState(null, "", location.pathname); setPage({ name: pg === "events" ? "events" : "home", params: pg === "messages" || tab ? { tab: tab || "messages", t: Date.now() } : null }); }
   }, []);
-  const nav = [["home", "Coach", "⌂"], ["events", "Tickets", "🎟"], ["more", "Account", "≡"]];
+  const tab = page.name === "home" ? page.params?.tab || "home" : null;
+  const groups = tabsFor(profile);
+  const openTab = (k) => go("home", { tab: k });
+  const mobile = [["home", "Today", "⌂", () => openTab("home")], ["athletes", "Athletes", "🤸", () => openTab("athletes")], ["attendance", "Roll call", "✅", () => openTab("attendance")], runsMeets(profile) ? ["events", "Meets", "🎟", () => go("events")] : ["results", "Results", "📊", () => openTab("results")], ["more", "Account", "≡", () => go("more")]];
   return (
-    <div className="app">
-      <header className="topbar">{page.name !== "home" ? <button className="back-btn" onClick={goBack} aria-label="Back">‹ <span>Back</span></button> : <Logo small />}<span className="who">{profile.gym_name || "Coach account"}</span><button className="link" onClick={() => logOut()}>Log out</button>{DEMO && <a className="demo-tag" href="/?demo" onClick={(e) => demoRole(e, "1")} title="Switch to the parent demo">Demo<span className="hide-sm"> · parent view</span> ›</a>}</header>
+    <div className="app biz-app">
+      <header className="topbar">{page.name !== "home" ? <button className="back-btn" onClick={goBack} aria-label="Back">‹ <span>Back</span></button> : <Logo small />}<span className="who">{profile.gym_name || "Coach account"} <small className="role-pill">{roleLabel(profile)}</small></span><button className="link" onClick={() => logOut()}>Log out</button>{DEMO && <DemoSwitch current={roleOf(profile)} />}</header>
+      <nav className="sidebar" aria-label="Main">
+        <Logo />
+        {groups.map(([label, items]) => <React.Fragment key={label}><p className="side-head">{label}</p>
+          {items.map(([k, l, i]) => <button key={k} className={tab === k ? "on" : ""} aria-current={tab === k ? "page" : undefined} onClick={() => openTab(k)}><span aria-hidden>{i}</span>{l}{k === "messages" && me?.unread_messages ? <span className="badge inline">{me.unread_messages}</span> : null}</button>)}</React.Fragment>)}
+        {runsMeets(profile) && <><p className="side-head">Meets</p><button className={page.name === "events" ? "on" : ""} onClick={() => go("events")}><span aria-hidden>🎟️</span>Tickets & live scores</button></>}
+        <hr />
+        <button className={page.name === "more" ? "on" : ""} onClick={() => go("more")}><span aria-hidden>⚙️</span>Account</button>
+        <a className="side-link" href="/faq"><span aria-hidden>❓</span>FAQ</a>
+        <button className="sidebar-bottom" onClick={() => logOut()}><span aria-hidden>⎋</span>Log out</button>
+      </nav>
       {banner && <div className="banner">{banner}</div>}
       <main className="content"><P key={page.name} {...props} /></main>
-      <nav className="tabbar">{nav.map(([k, l, i]) => <button key={k} className={page.name === k || (k === "more" && page.name === "admin") ? "on" : ""} onClick={() => go(k)}><span className="tab-icon" aria-hidden>{i}</span>{l}</button>)}</nav>
+      <nav className="tabbar">{mobile.map(([k, l, i, fn]) => <button key={k} className={(page.name === "home" && tab === k) || page.name === k ? "on" : ""} onClick={fn}><span className="tab-icon" aria-hidden>{i}</span>{l}</button>)}</nav>
     </div>
   );
+}
+// Demo only: switch between the four roles.
+export function DemoSwitch({ current }) {
+  const [open, setOpen] = useState(false);
+  const roles = [["1", "Parent", "parent"], ["coach", "Coach", "coach"], ["gym", "Gym owner", "gym"], ["organizer", "Meet organizer", "organizer"]];
+  return <span className="demo-switch"><button className="demo-tag" onClick={() => setOpen(!open)}>Demo · {roles.find((r) => r[2] === current)?.[1] || "Parent"} ▾</button>
+    {open && <span className="demo-menu" role="menu">{roles.map(([v, l, k]) => <a key={v} role="menuitem" href={`/?demo=${v === "1" ? "parent" : v}`} className={k === current ? "on" : ""} onClick={(e) => demoRole(e, v)}>{l}</a>)}</span>}</span>;
 }
 
 const EVERY = { monthly: "month", quarterly: "3 months", semiannual: "6 months", yearly: "year" };

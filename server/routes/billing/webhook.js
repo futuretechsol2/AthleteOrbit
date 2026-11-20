@@ -1,3 +1,5 @@
+import { fulfillInvoice } from "../gym.js";
+import { fulfillMeetPro } from "../org.js";
 import { handler, readRaw, deps, env, HttpError, sendEmail, emailLayout, esc } from "../../lib.js";
 import crypto from "node:crypto";
 import { termFromRecurring, PLANS, TIER_ORDER, TIERS, termLabel } from "../../../src/data/plans.js";
@@ -36,6 +38,14 @@ async function processEvent(sb, event) {
   }
   if (event.type === "checkout.session.completed" && event.data.object?.metadata?.kind === "prints") {
     if (event.data.object.payment_status === "paid") await fulfillPrints(event.data.object);
+    return { received: true };
+  }
+  if (event.type === "checkout.session.completed" && event.data.object?.metadata?.kind === "gym_invoice") {
+    if (event.data.object.payment_status === "paid") await fulfillInvoice(event.data.object);
+    return { received: true };
+  }
+  if (event.type === "checkout.session.completed" && event.data.object?.metadata?.kind === "meet_pro") {
+    if (event.data.object.payment_status === "paid") await fulfillMeetPro(event.data.object);
     return { received: true };
   }
   if (event.type === "checkout.session.completed" && event.data.object?.metadata?.kind === "tickets") {
@@ -125,7 +135,7 @@ export async function rewardReferrer(sb, userId, customer) {
 const supportInbox = () => process.env.SUPPORT_INBOX_EMAIL || "support@athleteorbit.org";
 const usd = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
 const day = (sec) => new Date(sec * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" });
-const KIND_NAMES = { tickets: "Meet tickets", prints: "Photo prints", live_pro: "Live Scoring Pro", athlete_page: "Recruiting page" };
+const KIND_NAMES = { gym_invoice: "Gym tuition / fees", meet_pro: "Meet Pro (12 months)", tickets: "Meet tickets", prints: "Photo prints", live_pro: "Live Scoring Pro", athlete_page: "Recruiting page" };
 
 function planName(meta = {}) {
   if (meta.kind === "club") return `AthleteOrbit for Gyms (${termLabel(meta.plan || "monthly")})`;
@@ -154,7 +164,7 @@ export async function paymentEmails(sb, event) {
     if (o.payment_status !== "paid") return;
     const what = KIND_NAMES[meta.kind] || "Purchase", amount = usd(o.amount_total);
     // Tickets and prints already send their own confirmation with the details; the others get a receipt here.
-    if (email && ["live_pro", "athlete_page"].includes(meta.kind)) await sendEmail({ to: email, subject: `Payment received: ${what}`, html: emailLayout({ title: "Thank you, your payment went through", body: `<p><b>${esc(what)}</b>: <b>${amount}</b></p><p style="font-size:13px;color:#7B8197">Questions? Just reply to this email.</p>` }) });
+    if (email && ["live_pro", "athlete_page", "gym_invoice", "meet_pro"].includes(meta.kind)) await sendEmail({ to: email, subject: `Payment received: ${what}`, html: emailLayout({ title: "Thank you, your payment went through", body: `<p><b>${esc(what)}</b>: <b>${amount}</b></p><p style="font-size:13px;color:#7B8197">Questions? Just reply to this email.</p>` }) });
     await sendEmail({ to: supportInbox(), replyTo: email || undefined, subject: `💰 New payment: ${what} ${amount} · ${email || "unknown email"}`, html: emailLayout({ title: "New payment", body: `<p><b>${esc(email || "unknown")}</b> paid <b>${amount}</b> for <b>${esc(what)}</b>.</p>` }) });
     return;
   }

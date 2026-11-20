@@ -125,6 +125,13 @@ function More({ items, n = 4, render, className }) {
   return <>{<div className={className}>{list.map(render)}</div>}{small && !all && items.length > n && <p className="center"><button className="link" onClick={() => setAll(true)}>Show {items.length - n} more ›</button></p>}</>;
 }
 
+const PERSONAS = [
+  { key: "coach", icon: "🧑‍🏫", title: "Coaches", price: "Free", priceNote: "founding season · Coach Pro $19/mo later", gets: ["Today screen: who needs you this week", "One-tap roll call", "Snap the score sheet → every athlete's history", "Skills tracker & practice plans", "AI-drafted plans & parent reports you approve"], why: "it gives back hours every week — and pays you 10% of every family you bring.", cta: "Start as a coach" },
+  { key: "gym", icon: "🏛️", title: "Gym owners", price: "$0 + 1%", priceNote: "of tuition paid online · or $99/mo flat, 0%", gets: ["Everything coaches get, for every coach", "Classes, capacity & automatic waitlists", "Tuition billing families pay from their phone", "Staff schedule, payroll hours & reports", "Email any level or class · 1-to-1 chat"], why: "faster tuition, fewer chases, and a family app that makes the gym look great — at no fixed cost.", cta: "Start my gym" },
+  { key: "organizer", icon: "🏟️", title: "Meet organizers", price: "Free", priceNote: "up to 50 entries · Meet Pro $199/year", gets: ["Registration with duplicate & missing-info checks", "Sessions with automatic rotations", "Judges & volunteers, emailed in one tap", "Tickets, door scanning, live scores", "One-tap floor music that works offline"], why: "no more spreadsheets, paper rotations or phone-dead floor music — and ticket sales pay for it.", cta: "Run a meet" },
+  { key: "parent", icon: "👪", title: "Parents", price: "$0", priceNote: "with your gym · Family Pro optional", gets: ["Only your athlete's meets, times & reminders", "Scores, personal bests & coach feedback", "Pay tuition from your phone", "Tickets with QR, live scores", "Photos, prints & Coach G"], why: "everything about your athlete in one place — and it came with the gym.", cta: "Join my gym" },
+];
+
 export default function Landing({ nav }) {
   const [who, setWho] = useState("parent"); const [term, setTerm] = useState("yearly"); const [tierSel, setTierSel] = useState("basic"); const [contact, setContact] = useState(false);
   const go = (path) => (e) => { e.preventDefault(); nav(path); };
@@ -202,6 +209,28 @@ export default function Landing({ nav }) {
           <p className="l-lead">One-tap roll call. Snap the score sheet and every athlete's results are saved, with trends and personal bests. Evaluations and development plans in minutes (AI drafts, you approve), progress reports parents actually read — and an assistant that tells you who needs attention this week.</p>
           <ul className="perks hide-sm">{PLANS.gym.features.map((f) => <li key={f}>{f}</li>)}</ul>
           <div className="row"><a className="btn btn-primary" href="/register?type=gym" onClick={go("/register?type=gym")}>Start free for 30 days</a><a className="btn btn-ghost" href="/?demo=coach">▶ See the coach demo</a></div>
+        </div>
+      </section>
+
+      <section className="l-section" id="who">
+        <p className="eyebrow">One app for everyone at the gym and the meet</p>
+        <h2>Coaches run the team. Gyms run the business. Organizers run the meet. Families just follow along — free.</h2>
+        <div className="personas">
+          {PERSONAS.map((p) => (
+            <div key={p.key} className="persona">
+              <span className="pi" aria-hidden>{p.icon}</span><h3>{p.title}</h3>
+              <span className="price">{p.price}</span><small className="muted">{p.priceNote}</small>
+              <ul>{p.gets.map((g) => <li key={g}>{g}</li>)}</ul>
+              <p className="why"><b>Why they pay:</b> {p.why}</p>
+              <div className="row tight"><a className="btn btn-primary sm" href={`/register?type=${p.key}`} onClick={go(`/register?type=${p.key}`)}>{p.cta}</a><a className="btn btn-ghost sm" href={`/?demo=${p.key}`}>Demo</a></div>
+            </div>))}
+        </div>
+        <h3 style={{ marginTop: 28 }}>How the money works — nobody pays twice</h3>
+        <div className="money-flow">
+          <div><b>Parents: $0</b>The family app comes with your gym. No extra bill — it's part of what the gym already provides.</div>
+          <div><b>Gyms: free while you bill through us</b>Collect tuition online (paid straight to your bank) and AthleteOrbit stays free — we keep 1% of what's paid online. Prefer flat? $99/mo, 0%.</div>
+          <div><b>Gyms earn</b>20% of every Family Pro upgrade from your families, plus your meet ticket sales — AthleteOrbit pays for itself.</div>
+          <div><b>Coaches earn</b>10% of every paying family they bring in — monthly, for as long as the family stays.</div>
         </div>
       </section>
 

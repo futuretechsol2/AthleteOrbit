@@ -26,14 +26,14 @@ export default handler(["GET"], async (req) => {
   const recent30 = P.filter((p) => now - new Date(p.created_at).getTime() < 30 * day);
   const sources = {};
   for (const p of recent30) { const k = (p.signup_source || (p.referred_by ? "referral" : "direct")).split("/")[0].trim().toLowerCase() || "direct"; sources[k] = (sources[k] || 0) + 1; }
-  const parents = P.filter((p) => p.account_type !== "gym");
+  const parents = P.filter((p) => !p.account_type || p.account_type === "parent");
   const inTrial = parents.filter((p) => p.subscription_status === "none" && p.trial_ends_at && new Date(p.trial_ends_at).getTime() > now).length;
   const trialEnded = parents.filter((p) => p.trial_ends_at && new Date(p.trial_ends_at).getTime() <= now);
   const converted = trialEnded.filter((p) => ["active", "trialing", "past_due"].includes(p.subscription_status) || p.club_id).length;
   const mrrGyms = activeClubs.reduce((a, c) => { const t = c.plan || "yearly"; return a + PLANS.gym.prices[t] / months[t]; }, 0);
   const since = (d) => P.filter((p) => now - new Date(p.created_at).getTime() < d * day).length;
   return {
-    totals: { accounts: P.length, parents: P.filter((p) => p.account_type !== "gym").length, gymOwners: P.filter((p) => p.account_type === "gym").length, children: children || 0 },
+    totals: { accounts: P.length, parents: P.filter((p) => !p.account_type || p.account_type === "parent").length, gymOwners: P.filter((p) => p.account_type === "gym").length, coaches: P.filter((p) => p.account_type === "coach").length, organizers: P.filter((p) => p.account_type === "organizer").length, children: children || 0 },
     signups: { last7: since(7), last30: since(30) },
     subscriptions: { paying: paying.length, trialing: trialing.length + inTrial, byTier, trialConversion: trialEnded.length ? Math.round((converted / trialEnded.length) * 100) : null, pastDue: P.filter((p) => p.subscription_status === "past_due").length, byPlan, viaGym: P.filter((p) => p.club_id).length },
     gyms: { active: activeClubs.length, byPlan: gymByPlan, list: activeClubs.map((c) => ({ name: c.name, code: c.code, plan: c.plan, families: P.filter((p) => p.club_id === c.id).length, seats: c.seats })) },

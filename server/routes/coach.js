@@ -300,11 +300,11 @@ export const ask = handler(["POST"], async (req) => {
 
 // ---------- Coach ambassador: families in the coach's program and what they'd earn ----------
 export const ambassador = handler(["GET"], async (req) => {
-  const { user } = await requireUser(req);
+  const { user, profile } = await requireUser(req);
   const club = await myClub(user.id);
   const { data: fams } = await deps.supabase().from("profiles").select("id,subscription_status,subscription_plan,created_at").eq("club_id", club.id);
   const paying = (fams || []).filter((f) => f.subscription_status === "active");
-  return { code: club.code, families: (fams || []).length, trialing: (fams || []).filter((f) => f.subscription_status === "trialing").length, paying: paying.length, rate: 0.1 };
+  return { code: club.code, families: (fams || []).length, trialing: (fams || []).filter((f) => f.subscription_status === "trialing").length, paying: paying.length, rate: profile?.account_type === "gym" ? 0.2 : 0.1 };
 });
 
 // ---------- Parent portal: only what the coach published as parent-visible, plus the athlete's results ----------
@@ -326,4 +326,51 @@ export const family = handler(["GET"], async (req) => {
   return { linked: true, gym: club?.name || null, events: eventsFor(sport, r.gender),
     results: rs.map((x) => ({ meet_name: x.meet_name, meet_date: x.meet_date, scores: x.scores || {}, aa: x.aa, place: x.place })), analysis: analyze(rs, sport),
     feedback: (ns || []).sort((a, b) => ((a.published_at || a.created_at) > (b.published_at || b.created_at) ? -1 : 1)).map((n) => ({ id: n.id, kind: n.kind, date: (n.published_at || n.created_at || "").slice(0, 10), body: n.body, strengths: n.strengths, weaknesses: n.weaknesses, next_steps: n.next_steps, ratings: n.ratings, plan: n.plan })) };
+});
+
+// ---------- Skill tracking: every athlete's level skills with a status the coach taps through ----------
+import { skillsForChild } from "../../src/data/sports.js";
+const SKILL_STATUS = ["learning", "consistent", "competition"];
+const childOf = (r, club) => ({ sport: r.sport || club.sport || "Gymnastics", program: r.program || (r.gender === "M" ? "MAG" : /xcel/i.test(r.level || "") ? "Xcel" : "WAG"), level: r.level });
+export const skills = handler(["GET", "POST"], async (req) => {
+  const { user } = await requireUser(req);
+  const club = await myClub(user.id);
+  const sb = deps.supabase();
+  const ros = await rosterOf(club);
+  if (req.method === "GET") {
+    const sp = new URL(req.url || "/", "http://x").searchParams; const id = sp.get("roster"), level = sp.get("level");
+    const { data: st } = await sb.from("coach_skills").select("*").eq("club_id", club.id);
+    const who = id ? ros.filter((r) => r.id === id) : level ? ros.filter((r) => r.level === level) : ros;
+    return { levels: [...new Set(ros.map((r) => r.level).filter(Boolean))], athletes: who.map((r) => {
+      const list = skillsForChild(childOf(r, club)); const mine = new Map((st || []).filter((s) => s.roster_id === r.id).map((s) => [s.skill, s.status]));
+      const extra = [...mine.keys()].filter((k) => !list.some((x) => x.skill === k)).map((k) => ({ event: "Other", skill: k }));
+      const all = [...list.map(({ event, skill }) => ({ event, skill })), ...extra].map((s) => ({ ...s, status: mine.get(s.skill) || null }));
+      return { id: r.id, name: r.name, level: r.level, skills: all, ready: all.length ? Math.round((all.filter((s) => s.status === "competition").length / all.length) * 100) : null };
+    }) };
+  }
+  const b = await readJson(req);
+  if (!ros.some((r) => r.id === b.roster_id)) throw new HttpError(404, "Athlete not found.");
+  const skill = str(b.skill, 120); if (!skill) throw new HttpError(400, "Pick a skill.");
+  if (b.status === null) { await sb.from("coach_skills").delete().eq("roster_id", b.roster_id).eq("skill", skill); return { saved: true }; }
+  if (!SKILL_STATUS.includes(b.status)) throw new HttpError(400, "Pick learning, consistent or competition-ready.");
+  const { error } = await sb.from("coach_skills").upsert({ club_id: club.id, roster_id: b.roster_id, skill, status: b.status, updated_at: deps.now().toISOString() }, { onConflict: "roster_id,skill" });
+  if (error) throw error;
+  return { saved: true };
+});
+
+// ---------- Practice planner: timed blocks by station, reusable templates, done tracking ----------
+export const practice = handler(["GET", "POST"], async (req) => {
+  const { user } = await requireUser(req);
+  const club = await myClub(user.id);
+  const sb = deps.supabase();
+  if (req.method === "GET") { const { data } = await sb.from("practice_plans").select("*").eq("club_id", club.id); return { plans: (data || []).sort((a, b) => (a.is_template === b.is_template ? ((b.day || "") > (a.day || "") ? 1 : -1) : a.is_template ? 1 : -1)) }; }
+  const b = await readJson(req);
+  if (b.remove) { await sb.from("practice_plans").delete().eq("id", b.remove).eq("club_id", club.id); return { removed: true }; }
+  const rec = { title: str(b.title, 120), day: DAY.test(b.day || "") ? b.day : null, group_name: str(b.group_name, 60), objectives: str(b.objectives, 1000), is_template: !!b.is_template, done: !!b.done,
+    blocks: (Array.isArray(b.blocks) ? b.blocks : []).slice(0, 30).map((x) => ({ minutes: Math.max(1, Math.min(240, Math.round(Number(x.minutes) || 10))), station: str(x.station, 60), drills: str(x.drills, 600), done: !!x.done })).filter((x) => x.station || x.drills),
+    updated_at: deps.now().toISOString() };
+  if (!rec.title) throw new HttpError(400, "Give the plan a title.");
+  if (b.id) { const { data: p } = await sb.from("practice_plans").select("id").eq("id", b.id).eq("club_id", club.id).maybeSingle(); if (!p) throw new HttpError(404, "Plan not found."); await sb.from("practice_plans").update(rec).eq("id", p.id); return { saved: true, id: p.id }; }
+  const { data, error } = await sb.from("practice_plans").insert({ club_id: club.id, ...rec }).select("id").maybeSingle(); if (error) throw error;
+  return { saved: true, id: data?.id };
 });

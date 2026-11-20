@@ -1,3 +1,4 @@
+import { roleLabel, runsMeets, isBusiness } from "../data/roles.js";
 import { FindAthleteFirst } from "./Center.jsx";
 import { RecruitEditor } from "./Recruit.jsx";
 import { AthleteViewSetup } from "./AthleteView.jsx";
@@ -17,7 +18,7 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
   const [contact, setContact] = useState(false); const [inbox, setInbox] = useState(!!params?.inbox);
   const [edit, setEdit] = useState(params?.add ? {} : null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
   const [announce, setAnnounce] = useState(params?.announce || null); const [pwOpen, setPwOpen] = useState(false);
-  const gymAcct = profile?.account_type === "gym" && !kids.length;
+  const gymAcct = isBusiness(profile) && !kids.length;
   async function billing() {
     setBusy(true); setErr(null);
     try { const { url } = await api("billing/portal"); openExternal(url); } catch (e) { setErr(e); }
@@ -35,7 +36,8 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
       <nav className="card menu">
         {!gymAcct && <>
           <button onClick={() => go("photos")}>📸 Photos & prints</button>
-          <button onClick={() => go("events")}>🎟️ {profile?.account_type === "gym" || (me?.admin && !DEMO) ? "Sell tickets & live scores" : "Buy & view tickets"}</button>
+          {!gymAcct && <button onClick={() => go("billing")}>💳 Payments to your gym</button>}
+          <button onClick={() => go("events")}>🎟️ {runsMeets(profile) || (me?.admin && !DEMO) ? "Sell tickets & live scores" : "Buy & view tickets"}</button>
           <a href="/live">● Live scores</a>
           {kids?.length > 0 && <button onClick={() => setRecruit(kids.length === 1 ? kids[0] : "pick")}>🎓 Recruiting page</button>}
           {kids?.length > 0 && <button onClick={() => setKidView(true)}>👀 Athlete view for kids</button>}
@@ -95,7 +97,7 @@ export default function More({ gymnasts, allKids, profile, paid, refresh, openPa
           <dt>Name</dt><dd>{profile?.full_name || "—"}</dd>
           <dt>Username</dt><dd>{profile?.username || me?.username || "—"}</dd>
           <dt>Email</dt><dd>{DEMO ? "demo@athleteorbit.app" : session?.user?.email}</dd>
-          <dt>Account type</dt><dd>{gymAcct || profile?.account_type === "gym" ? "Coach / gym" : "Parent"}</dd>
+          <dt>Account type</dt><dd>{roleLabel(profile)}</dd>
         </dl>
         {DEMO && <p className="muted small">Demo mode — data is saved on this device only.</p>}
         <div className="row">

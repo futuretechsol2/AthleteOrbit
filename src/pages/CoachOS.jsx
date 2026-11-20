@@ -69,8 +69,8 @@ function Ambassador() {
   const link = `${location.origin}/register?gym=${d.code}`;
   return (
     <section className="card ambassador">
-      <h3>🤝 Coach ambassador</h3>
-      <p className="small">Families who join with your code get AthleteOrbit through you. During launch, coaches earn <b>10% of every paying family's subscription</b> they bring in — paid monthly.</p>
+      <h3>🤝 {d.rate > 0.1 ? "Gym partner earnings" : "Coach ambassador"}</h3>
+      <p className="small">Families who join with your code get AthleteOrbit through you. You earn <b>{Math.round(d.rate * 100)}% of every paying family's subscription</b> from your program — paid monthly, for as long as they stay.</p>
       <div className="stats three">
         <div className="stat"><span className="stat-value">{d.families}</span><span className="stat-label">Families joined</span></div>
         <div className="stat"><span className="stat-value">{d.paying}</span><span className="stat-label">Paying</span></div>
@@ -415,5 +415,71 @@ export function FromCoach({ gymnast }) {
         {f.strengths && <p className="small"><b>Strengths:</b> {f.strengths}</p>}{f.weaknesses && <p className="small"><b>Working on:</b> {f.weaknesses}</p>}{f.next_steps && <p className="small"><b>Next:</b> {f.next_steps}</p>}{f.body && <p className="small pre">{f.body}</p>}</div>)}
       {!!best.length && <div className="pb-row">{best.map(([e, x]) => <span key={e} className="pb-chip"><small>{e} best</small><b>{fmtScore(x.best, "Gymnastics")}</b>{x.change != null && <small className={`delta ${tone(x.change)}`}>{arrow(x.change)} {signed(x.change)}</small>}</span>)}</div>}
     </section>
+  );
+}
+
+// ---------------- Skills: the level's skill list per athlete; tap to move learning → consistent → competition-ready ----------------
+const NEXT = { null: "learning", learning: "consistent", consistent: "competition", competition: null };
+const SKL = { learning: ["Learning", "sk-learn"], consistent: ["Consistent", "sk-cons"], competition: ["Comp-ready", "sk-comp"] };
+export function CoachSkills() {
+  const [lvl, setLvl] = useState(""); const [d, setD] = useState(null); const [err, setErr] = useState(null); const [open, setOpen] = useState(null);
+  const load = (level) => api("coach/skills", null, "GET", level ? { level } : {}).then((r) => { setD(r); if (!level && !lvl && r.levels[0]) { setLvl(r.levels[0]); api("coach/skills", null, "GET", { level: r.levels[0] }).then(setD); } }).catch(setErr);
+  useEffect(() => { load(lvl); }, [lvl]);
+  const tap = async (a, s) => { const status = NEXT[s.status ?? null]; setD((x) => ({ ...x, athletes: x.athletes.map((y) => (y.id !== a.id ? y : { ...y, skills: y.skills.map((z) => (z.skill === s.skill ? { ...z, status } : z)) })) })); try { await api("coach/skills", { roster_id: a.id, skill: s.skill, status }); } catch (e) { setErr(e); } };
+  if (!d) return err ? <ErrorNote error={err} /> : <Spinner />;
+  return (
+    <div className="stack">
+      <section className="card"><h3>🎯 Skill tracking</h3><p className="muted small">Every athlete's skills for her level. Tap a skill to move it: <span className="sk sk-learn">Learning</span> → <span className="sk sk-cons">Consistent</span> → <span className="sk sk-comp">Comp-ready</span>. Parents see progress only if you share a report.</p>
+        <div className="chips">{d.levels.map((l) => <button key={l} className={`chip ${lvl === l ? "on" : ""}`} onClick={() => setLvl(l)}>{l}</button>)}</div></section>
+      {d.athletes.map((a) => { const done = a.skills.filter((s) => s.status === "competition").length; return (
+        <section key={a.id} className="card">
+          <button className="list-row" onClick={() => setOpen(open === a.id ? null : a.id)}><span className="grow"><b>{a.name}</b><small className="muted"> · {a.level} · {done}/{a.skills.length} competition-ready</small></span><span className="meter"><span style={{ width: `${a.ready || 0}%` }} /></span><span aria-hidden>{open === a.id ? "▾" : "›"}</span></button>
+          {open === a.id && (a.skills.length ? Object.entries(a.skills.reduce((m, s) => ({ ...m, [s.event]: [...(m[s.event] || []), s] }), {})).map(([ev, list]) => (
+            <div key={ev} className="sk-group"><p className="small"><b>{ev}</b></p><div className="sk-wrap">{list.map((s) => <button key={s.skill} className={`sk ${s.status ? SKL[s.status][1] : ""}`} onClick={() => tap(a, s)} title={s.status ? SKL[s.status][0] : "Not started"}>{s.skill}{s.status ? ` · ${SKL[s.status][0]}` : ""}</button>)}</div></div>
+          )) : <p className="muted small">No skill list for this level yet.</p>)}
+        </section>); })}
+      <ErrorNote error={err} />
+    </div>
+  );
+}
+
+// ---------------- Practice planner ----------------
+const blank = () => ({ title: "", day: today(), group_name: "", objectives: "", blocks: [{ minutes: 15, station: "Warm-up", drills: "" }], is_template: false });
+export function CoachPractice() {
+  const [d, setD] = useState(null); const [err, setErr] = useState(null); const [edit, setEdit] = useState(null); const [busy, setBusy] = useState(false);
+  const load = () => api("coach/practice", null, "GET").then(setD).catch(setErr);
+  useEffect(() => { load(); }, []);
+  const save = async (p) => { setBusy(true); setErr(null); try { await api("coach/practice", p); setEdit(null); await load(); } catch (e) { setErr(e); } setBusy(false); };
+  if (!d) return err ? <ErrorNote error={err} /> : <Spinner />;
+  const temps = d.plans.filter((p) => p.is_template), plans = d.plans.filter((p) => !p.is_template);
+  if (edit) { const p = edit, set = (k, v) => setEdit({ ...p, [k]: v }), setB = (i, k, v) => set("blocks", p.blocks.map((b, j) => (j === i ? { ...b, [k]: v } : b)));
+    const total = p.blocks.reduce((a, b) => a + (Number(b.minutes) || 0), 0);
+    return (
+      <div className="card form">
+        <button className="link" onClick={() => setEdit(null)}>‹ Back</button>
+        <Field label="Title"><input value={p.title} onChange={(e) => set("title", e.target.value)} placeholder="Tuesday — Level 4 team" /></Field>
+        <div className="grid2"><Field label="Day"><input type="date" value={p.day || ""} onChange={(e) => set("day", e.target.value)} /></Field><Field label="Group"><input value={p.group_name || ""} onChange={(e) => set("group_name", e.target.value)} placeholder="Level 4" /></Field></div>
+        <Field label="Objectives"><textarea rows={2} value={p.objectives || ""} onChange={(e) => set("objectives", e.target.value)} placeholder="Bars: clean kips. Beam: series confidence." /></Field>
+        <p className="small"><b>Stations</b> · {total} minutes</p>
+        {p.blocks.map((b, i) => <div key={i} className="block-row">
+          <label className="check"><input type="checkbox" checked={!!b.done} onChange={(e) => setB(i, "done", e.target.checked)} aria-label="Done" /></label>
+          <input className="mins" inputMode="numeric" value={b.minutes} onChange={(e) => setB(i, "minutes", e.target.value.replace(/\D/g, ""))} aria-label="Minutes" />
+          <div className="grow"><input value={b.station || ""} onChange={(e) => setB(i, "station", e.target.value)} placeholder="Station (Bars, Beam, Conditioning…)" /><input value={b.drills || ""} onChange={(e) => setB(i, "drills", e.target.value)} placeholder="Drills" className="small" /></div>
+          <button type="button" className="link" aria-label="Remove station" onClick={() => set("blocks", p.blocks.filter((_, j) => j !== i))}>×</button></div>)}
+        <button type="button" className="link" onClick={() => set("blocks", [...p.blocks, { minutes: 15, station: "", drills: "" }])}>＋ Add a station</button>
+        <label className="check"><input type="checkbox" checked={!!p.is_template} onChange={(e) => set("is_template", e.target.checked)} /> Save as a reusable template</label>
+        <div className="row tight"><Button disabled={busy || !p.title} onClick={() => save(p)}>{busy ? "Saving…" : "Save plan"}</Button>{p.id && <Button kind="ghost" onClick={() => save({ remove: p.id })}>Delete</Button>}</div>
+        <ErrorNote error={err} />
+      </div>); }
+  return (
+    <div className="stack">
+      <div className="row tight"><Button onClick={() => setEdit(blank())}>＋ New practice plan</Button></div>
+      {!!temps.length && <section className="card"><h3>Templates</h3>{temps.map((t) => <div key={t.id} className="list-row static"><span className="grow"><b>{t.title}</b><small className="muted"> · {t.blocks.length} stations · {t.blocks.reduce((a, b) => a + b.minutes, 0)} min</small></span><button className="link small" onClick={() => setEdit({ ...t, id: undefined, is_template: false, day: today(), title: `${t.title} — ${fmt.date(today())}`, blocks: t.blocks.map((b) => ({ ...b, done: false })) })}>Use</button><button className="link small" onClick={() => setEdit(t)}>Edit</button></div>)}</section>}
+      <section className="card"><h3>Plans</h3>
+        {!plans.length ? <p className="muted small">No plans yet. Build one, tick stations off during practice, and save the good ones as templates.</p> : plans.map((p) => { const n = p.blocks.filter((b) => b.done).length; return (
+          <button key={p.id} className="list-row" onClick={() => setEdit(p)}><span className="grow"><b>{p.title}</b><small className="muted"> · {p.day ? fmt.date(p.day) : "no date"}{p.group_name ? ` · ${p.group_name}` : ""} · {n}/{p.blocks.length} done</small>{p.objectives ? <><br /><small>{p.objectives}</small></> : null}</span><span aria-hidden>›</span></button>); })}
+      </section>
+      <ErrorNote error={err} />
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 // Data layer. Uses Supabase when configured; otherwise a local demo store so the app
 // can be tried instantly (demo data stays on this device only).
-import { demoCenter, demoMeExtras, demoMusic, demoCoach } from "./demoCenter.js";
+import { demoCenter, demoMeExtras, demoMusic, demoCoach, demoBiz, demoOrg } from "./demoCenter.js";
 import { demoLive } from "./demoLive.js";
 import { createClient } from "@supabase/supabase-js";
 
@@ -14,13 +14,15 @@ const forcedDemo = (() => {
   const q = new URLSearchParams(location.search).get("demo");
   try {
     if (q === "off") { sessionStorage.removeItem("ao-demo"); return false; }
-    if (q !== null) sessionStorage.setItem("ao-demo", q === "gym" || q === "coach" ? "gym" : "1");
+    if (q !== null) sessionStorage.setItem("ao-demo", ["gym", "coach", "organizer"].includes(q) ? q : "1");
     return !!sessionStorage.getItem("ao-demo");
   } catch { return q !== null && q !== "off"; }
 })();
 export const DEMO = forcedDemo || !URL_ || !KEY;
 // ?demo=gym shows the demo as a gym owner sees it (roster, season schedule, messages).
-export const DEMO_GYM = DEMO && (() => { try { return sessionStorage.getItem("ao-demo") === "gym"; } catch { return false; } })();
+// ?demo=coach | gym | organizer shows the demo as that role sees it (?demo or ?demo=parent: the family).
+export const DEMO_ROLE = !DEMO ? null : (() => { try { const v = sessionStorage.getItem("ao-demo"); return ["gym", "coach", "organizer"].includes(v) ? v : "parent"; } catch { return "parent"; } })();
+export const DEMO_GYM = DEMO_ROLE === "gym" || DEMO_ROLE === "coach";
 
 // Two guards against the app "hanging until refresh":
 // 1) Supabase's default auth lock uses navigator.locks, which can stay held forever after a tab sleeps or when
@@ -233,7 +235,7 @@ export const db = {
   async token() { if (DEMO) return "demo"; try { return (await currentSession())?.access_token; } catch { return null; } },
 
   async profile() {
-    if (DEMO) return DEMO_GYM ? { ...demoData().profile, account_type: "gym", gym_name: "Demo Gymnastics", full_name: "Coach Dana" } : demoData().profile;
+    if (DEMO) return DEMO_GYM ? { ...demoData().profile, account_type: DEMO_ROLE, gym_name: DEMO_ROLE === "coach" ? "Coach Dana's Team" : "Demo Gymnastics", full_name: "Coach Dana" } : DEMO_ROLE === "organizer" ? { ...demoData().profile, account_type: "organizer", gym_name: "Queen City Meets", full_name: "Morgan Lee" } : demoData().profile;
     const sess = await currentSession(); if (!sess) throw Object.assign(new Error("Please sign in again."), { status: 401 });
     const { data, error } = await supabase.from("profiles").select("*").eq("id", sess.user.id).maybeSingle();
     if (error) throw error;
@@ -266,7 +268,7 @@ export const db = {
   async _list(table, filter = {}) {
     const [col, asc] = ORDER[table] || ["created_at", true];
     if (DEMO) {
-      let rows = DEMO_GYM && table === "gymnasts" ? [] : demoData()[table] || [];
+      let rows = (DEMO_GYM || DEMO_ROLE === "organizer") && table === "gymnasts" ? [] : demoData()[table] || [];
       for (const [k, v] of Object.entries(filter)) rows = rows.filter((r) => r[k] === v);
       return [...rows].sort((a, b) => (a[col] || "") === (b[col] || "") ? 0 : ((a[col] || "") > (b[col] || "") ? 1 : -1) * (asc ? 1 : -1));
     }
@@ -420,6 +422,8 @@ async function demoApi(path, body) {
   if (path === "meet/rsvp") { const d = demoData(); const m = d.meets.find((x) => x.id === body?.meet); if (!m?.club_meet_id) return { rsvp: null }; d.rsvp ||= {}; if (body.status) { d.rsvp[m.id] = body.status; save(d); } return { rsvp: { gym: "Demo Gymnastics", status: d.rsvp[m.id] || null, paid: false, fee_cents: 9500, fee_due: m.start_date } }; }
   if (path === "tickets/attendees") return { attendees: [["Dan Patel", "dan@example.com", 3, 0], ["Jen Brooks", "jen@example.com", 2, 0], ["Carlos Ortiz", "carlos@example.com", 4, 0]].map(([name, email, tickets, checkedIn]) => ({ name, email, tickets, checkedIn, types: "Adult day pass, Child (6-12)", session: "Session 1 · Sat 8:00 AM" })) };
   if (path === "tickets/update") { const d = demoData(); const e = (d.events || []).find((x) => x.id === body.id); if (e) { e.updates = [{ text: body.text, at: new Date().toISOString() }, ...(e.updates || [])]; save(d); } return { posted: true, emailed: 96 }; }
+  if (path.startsWith("gym/") || path === "family/billing" || path === "coach/skills" || path === "coach/practice") { const out = demoBiz(path, body, demoData(), save); if (out) return out; }
+  if (path.startsWith("org/")) { const out = demoOrg(path, body, demoData(), save); if (out) return out; }
   if (path.startsWith("coach/")) { const out = demoCoach(path, body, demoData(), save); if (out) return out; }
   if (path === "music" || path.startsWith("music/")) { const out = demoMusic(path, body, demoData(), save); if (out) return out; }
   if (path.startsWith("club/") && path !== "club/checkout") { const out = demoCenter(path, body, demoData(), save, uid, DEMO_GYM); if (out) return out; }
@@ -444,7 +448,7 @@ async function demoApi(path, body) {
   if (path === "ai/trip") return { plan: "**Demo mode** — the live app writes this from your meet's city, dates and session time.\n\n**Travel plan**\n- Drive up Friday afternoon; book a refundable hotel 10–15 minutes from the venue\n- Ask the host gym about its hotel block\n\n**Meet-day timeline**\n- 6:30 wake, light breakfast\n- 7:15 arrive for 8:00 march-in\n\n**Family time nearby**\n- After awards: a well-known museum or park downtown (check hours)\n\n**Gymnast care**\n- Early night, water bottle, familiar snacks" };
   if (path === "ai/family") return { reply: "**Demo mode:** in the live app I answer from your real costs, budget and calendar.\n\nFrom the sample data: this season you've spent about **$1,328** across three kids, with **$269 unpaid**. Heads-up: **Nov 22** has Maya's Turkey Invitational in Raleigh and Zoe's swim meet in Charlotte on the same day." };
   if (path === "calendar-link") return { url: "", demo: true };
-  if (path === "me") { const d = demoData(); return { referral_code: "DEMO42", referrals: 2, subscription_status: d.profile.subscription_status, plan: d.profile.subscription_plan, username: d.profile.username, account_type: d.profile.account_type, pro: ["active", "trialing"].includes(d.profile.subscription_status) || new Date(d.profile.trial_ends_at || 0) > new Date(), tier: ["active", "trialing"].includes(d.profile.subscription_status) ? (d.profile.subscription_tier === "plus" ? "basic" : d.profile.subscription_tier) || "basic" : new Date(d.profile.trial_ends_at || 0) > new Date() ? "pro" : null, subscription_tier: d.profile.subscription_tier || null, trial: new Date(d.profile.trial_ends_at || 0) > new Date(), trial_ends_at: d.profile.trial_ends_at, admin: true, email_enabled: true, sms_enabled: false, ...demoMeExtras(d, DEMO_GYM), ...(DEMO_GYM ? { account_type: "gym" } : {}) }; }
+  if (path === "me") { const d = demoData(); return { referral_code: "DEMO42", referrals: 2, subscription_status: d.profile.subscription_status, plan: d.profile.subscription_plan, username: d.profile.username, account_type: d.profile.account_type, pro: ["active", "trialing"].includes(d.profile.subscription_status) || new Date(d.profile.trial_ends_at || 0) > new Date(), tier: ["active", "trialing"].includes(d.profile.subscription_status) ? (d.profile.subscription_tier === "plus" ? "basic" : d.profile.subscription_tier) || "basic" : new Date(d.profile.trial_ends_at || 0) > new Date() ? "pro" : null, subscription_tier: d.profile.subscription_tier || null, trial: new Date(d.profile.trial_ends_at || 0) > new Date(), trial_ends_at: d.profile.trial_ends_at, admin: true, email_enabled: true, sms_enabled: false, ...demoMeExtras(d, DEMO_GYM), ...(DEMO_ROLE !== "parent" ? { account_type: DEMO_ROLE } : {}), organizer_plan: d.orgPro ? "pro" : "free" }; }
   if (path === "admin/stats") return { totals: { accounts: 128, parents: 121, gymOwners: 7, children: 214 }, signups: { last7: 23, last30: 128 }, subscriptions: { paying: 41, trialing: 18, byTier: { basic: 31, pro: 10 }, trialConversion: 38, pastDue: 1, byPlan: { monthly: 22, quarterly: 8, semiannual: 4, yearly: 7 }, viaGym: 36 },
     gyms: { active: 3, byPlan: { monthly: 1, quarterly: 0, semiannual: 1, yearly: 1 }, list: [{ name: "Sample Gymnastics", code: "SAMPLE-1A2B3C", plan: "yearly", families: 22, seats: 50 }] },
     revenue: { mrr: 1112, arr: 13344, fromParents: 594, fromGyms: 518 }, support: { open: 2 }, marketing: { sources: { facebook: 41, flyer: 33, referral: 22, instagram: 18, direct: 14 }, referrals: 22 }, recent: [{ name: "Sample Parent", username: "sample_parent", email: "parent@example.com", type: "parent", status: "trialing", plan: "monthly", created_at: new Date().toISOString() }], demo: true };

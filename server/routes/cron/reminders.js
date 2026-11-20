@@ -190,7 +190,7 @@ export async function runTrialNotices() {
   const app = (process.env.APP_URL || "").replace(/\/$/, "");
   let sent = 0;
   for (const p of rows || []) {
-    if (!p.email || !p.trial_ends_at || p.account_type === "gym" || p.club_id) continue;
+    if (!p.email || !p.trial_ends_at || (p.account_type && p.account_type !== "parent") || p.club_id) continue;
     const left = (new Date(p.trial_ends_at).getTime() - now) / day;
     const kind = left > 0 && left <= 2 ? "2d" : left <= 0 && left > -3 ? "end" : null;
     if (!kind || (p.trial_notice || "").split(",").includes(kind)) continue;

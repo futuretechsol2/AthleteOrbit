@@ -929,3 +929,133 @@ create table if not exists public.coach_feedback (
 create index if not exists coach_feedback_roster on public.coach_feedback(roster_id);
 create index if not exists coach_feedback_club on public.coach_feedback(club_id);
 alter table public.coach_feedback enable row level security;
+
+-- ---------- v21: four roles (parent, coach, gym owner, meet organizer), gym operations, tuition billing, meet operations ----------
+alter table public.profiles drop constraint if exists profiles_account_type_check;
+alter table public.profiles add constraint profiles_account_type_check check (account_type in ('parent','gym','coach','organizer'));
+alter table public.profiles add column if not exists organizer_plan text not null default 'free' check (organizer_plan in ('free','pro'));
+alter table public.profiles add column if not exists organizer_pro_until timestamptz;
+alter table public.clubs add column if not exists stripe_account text;
+
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare m jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+begin
+  insert into public.profiles (id, email, username, full_name, account_type, gym_name, sports, referral_code, referred_by, signup_source)
+  values (new.id, new.email,
+          nullif(lower(m->>'username'), ''),
+          nullif(m->>'full_name', ''),
+          case when m->>'account_type' in ('gym','coach','organizer') then m->>'account_type' else 'parent' end,
+          nullif(m->>'gym_name', ''),
+          case when m ? 'sport' and m->>'sport' <> '' then array[m->>'sport'] else '{}'::text[] end,
+          upper(substr(md5(new.id::text), 1, 6)),
+          nullif(upper(left(regexp_replace(coalesce(m->>'ref', ''), '[^A-Za-z0-9]', '', 'g'), 12)), ''),
+          nullif(left(m->>'source', 120), ''))
+  on conflict (id) do nothing;
+  return new;
+exception when unique_violation then
+  raise exception 'USERNAME_TAKEN';
+end $$;
+
+create table if not exists public.gym_classes (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  level text, days text[] not null default '{}', start_time text, end_time text,
+  coach_name text, capacity int not null default 12 check (capacity between 1 and 500),
+  monthly_fee_cents int check (monthly_fee_cents is null or monthly_fee_cents between 0 and 1000000),
+  created_at timestamptz not null default now()
+);
+create index if not exists gym_classes_club on public.gym_classes(club_id);
+alter table public.gym_classes enable row level security;
+create table if not exists public.class_enrollments (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references public.gym_classes(id) on delete cascade,
+  roster_id uuid not null references public.club_roster(id) on delete cascade,
+  status text not null default 'enrolled' check (status in ('enrolled','waitlist')),
+  created_at timestamptz not null default now(),
+  unique (class_id, roster_id)
+);
+alter table public.class_enrollments enable row level security;
+create table if not exists public.gym_staff (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  role text not null default 'Coach', email text, phone text, pay_rate_cents int,
+  created_at timestamptz not null default now()
+);
+alter table public.gym_staff enable row level security;
+create table if not exists public.staff_shifts (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  staff_id uuid not null references public.gym_staff(id) on delete cascade,
+  day date not null, start_time text not null, end_time text not null,
+  class_id uuid references public.gym_classes(id) on delete set null, note text,
+  created_at timestamptz not null default now()
+);
+create index if not exists staff_shifts_club_day on public.staff_shifts(club_id, day);
+alter table public.staff_shifts enable row level security;
+create table if not exists public.gym_invoices (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  roster_id uuid references public.club_roster(id) on delete set null,
+  athlete_name text, family_email text,
+  description text not null check (char_length(description) <= 200),
+  amount_cents int not null check (amount_cents between 50 and 10000000),
+  due_date date, status text not null default 'open' check (status in ('open','paid','void')),
+  paid_at timestamptz, paid_via text, stripe_session text, platform_fee_cents int,
+  created_at timestamptz not null default now()
+);
+create index if not exists gym_invoices_club on public.gym_invoices(club_id);
+create index if not exists gym_invoices_email on public.gym_invoices(lower(family_email));
+alter table public.gym_invoices enable row level security;
+
+create table if not exists public.coach_skills (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  roster_id uuid not null references public.club_roster(id) on delete cascade,
+  skill text not null check (char_length(skill) <= 120),
+  status text not null check (status in ('learning','consistent','competition')),
+  updated_at timestamptz not null default now(),
+  unique (roster_id, skill)
+);
+alter table public.coach_skills enable row level security;
+create table if not exists public.practice_plans (
+  id uuid primary key default gen_random_uuid(),
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  title text not null check (char_length(title) <= 120),
+  day date, group_name text, objectives text, blocks jsonb not null default '[]',
+  is_template boolean not null default false, done boolean not null default false,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+alter table public.practice_plans enable row level security;
+
+create table if not exists public.meet_entries (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid not null references public.meet_listings(id) on delete cascade,
+  gym_name text not null check (char_length(gym_name) <= 80),
+  athlete_name text not null check (char_length(athlete_name) <= 80),
+  level text, division text, member_number text,
+  status text not null default 'pending' check (status in ('pending','verified','scratched')),
+  fee_paid boolean not null default false, notes text,
+  created_at timestamptz not null default now()
+);
+create index if not exists meet_entries_listing on public.meet_entries(listing_id);
+alter table public.meet_entries enable row level security;
+create table if not exists public.meet_sessions (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid not null references public.meet_listings(id) on delete cascade,
+  name text not null, day date, warmup text, start_time text,
+  levels text[] not null default '{}', rotation jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.meet_sessions enable row level security;
+create table if not exists public.meet_officials (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid not null references public.meet_listings(id) on delete cascade,
+  name text not null, email text, phone text,
+  role text not null default 'Volunteer', session_id uuid references public.meet_sessions(id) on delete set null,
+  station text, confirmed boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.meet_officials enable row level security;

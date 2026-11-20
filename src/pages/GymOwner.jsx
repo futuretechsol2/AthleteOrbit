@@ -1,5 +1,7 @@
 import { GymMusic } from "./Music.jsx";
-import { CoachToday, CoachAthletes, AthleteProfile, CoachAttendance, CoachResults, CoachAssistant } from "./CoachOS.jsx";
+import { CoachToday, CoachAthletes, AthleteProfile, CoachAttendance, CoachResults, CoachAssistant, CoachSkills, CoachPractice } from "./CoachOS.jsx";
+import { GymClasses, GymBilling, GymStaff, GymReports, GymEmail } from "./GymBusiness.jsx";
+import { runsGym, roleOf } from "../data/roles.js";
 import React, { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api, DEMO } from "../lib/db.js";
@@ -10,7 +12,11 @@ import { Button, Field, Sheet, Empty, ErrorNote, Spinner, fmt } from "../ui.jsx"
 import { openExternal } from "./More.jsx";
 import { SchedulePhoto, CompEdit, Thread, safeUrl } from "./Center.jsx";
 
-const TABS = [["home", "Today", "⌂"], ["athletes", "Athletes", "🤸"], ["attendance", "Attendance", "✅"], ["results", "Results", "📊"], ["assistant", "Assistant", "✨"], ["schedule", "Schedule", "🗓"], ["music", "Music", "🎵"], ["messages", "Messages", "💬"], ["posts", "Announce", "📣"], ["roster", "Roster", "👥"]];
+const COACHING = [["home", "Today", "⌂"], ["athletes", "Athletes", "🤸"], ["attendance", "Attendance", "✅"], ["results", "Results", "📊"], ["skills", "Skills", "🎯"], ["practice", "Practice plans", "📋"], ["assistant", "Assistant", "✨"], ["schedule", "Meet schedule", "🗓"], ["music", "Floor music", "🎵"]];
+const FAMILIES = [["messages", "Messages", "💬"], ["posts", "Announce", "📣"], ["roster", "Roster & families", "👥"]];
+const BUSINESS = [["classes", "Classes", "🏫"], ["billing", "Billing", "💳"], ["staff", "Staff schedule", "🗂"], ["reports", "Reports", "📈"], ["email", "Email families", "✉️"]];
+// Navigation groups by role: coaches get coaching + families; gym owners also get the business tools.
+export const tabsFor = (profile) => [["Coaching", COACHING], ["Families", FAMILIES], ...(runsGym(profile) ? [["Business", BUSINESS]] : [])];
 
 // Coach / gym account home: the Coach OS (today, athletes, attendance, results, assistant) plus roster, season
 // schedule, floor music, messages and announcements for every family.
@@ -25,19 +31,26 @@ export default function GymOwner({ profile, me, go, refresh, params }) {
   return (
     <div className="stack">
       <section className="hero">
-        <p className="eyebrow">Coach account</p>
+        <p className="eyebrow">{roleOf(profile) === "gym" ? "Gym owner" : "Coach"} account</p>
         <h1>{club?.name || profile.gym_name || "Your gym"}</h1>
         <p className="hero-sub">{club ? `${club.families} of ${club.seats} families joined · ${club.plan === "trial" ? `free trial, ${Math.max(0, daysLeft)} days left` : `${termLabel(club.plan || "yearly")} plan`}` : "Set up once. Every family gets their own athlete's season, reminders and a direct line to you."}</p>
       </section>
       <ErrorNote error={err} />
       {!club ? <StartGym profile={profile} onStarted={() => { load(); refresh?.(); }} /> : (
         <>
-          <div className="chips gym-tabs" role="tablist">{TABS.map(([k, l, i]) => <button key={k} role="tab" aria-selected={tab === k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}><span aria-hidden>{i}</span> {l}{k === "messages" && me?.unread_messages ? <span className="badge inline">{me.unread_messages}</span> : null}</button>)}</div>
+          <div className="chips gym-tabs" role="tablist">{tabsFor(profile).flatMap(([, t]) => t).map(([k, l, i]) => <button key={k} role="tab" aria-selected={tab === k} className={`chip ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}><span aria-hidden>{i}</span> {l}{k === "messages" && me?.unread_messages ? <span className="badge inline">{me.unread_messages}</span> : null}</button>)}</div>
           {tab === "home" && <CoachToday setTab={setTab} openAthlete={setAth}><Overview club={club} setTab={setTab} daysLeft={daysLeft} profile={profile} /></CoachToday>}
           {tab === "athletes" && <CoachAthletes openAthlete={setAth} setTab={setTab} />}
           {tab === "attendance" && <CoachAttendance />}
           {tab === "results" && <CoachResults openAthlete={setAth} />}
           {tab === "assistant" && <CoachAssistant openAthlete={setAth} />}
+          {tab === "skills" && <CoachSkills />}
+          {tab === "practice" && <CoachPractice />}
+          {runsGym(profile) && tab === "classes" && <GymClasses />}
+          {runsGym(profile) && tab === "billing" && <GymBilling />}
+          {runsGym(profile) && tab === "staff" && <GymStaff />}
+          {runsGym(profile) && tab === "reports" && <GymReports />}
+          {runsGym(profile) && tab === "email" && <GymEmail />}
           {ath && <AthleteProfile id={ath} onClose={() => setAth(null)} />}
           {tab === "roster" && <Roster club={club} />}
           {tab === "schedule" && <Schedule me={me} />}
@@ -62,7 +75,7 @@ function StartGym({ profile, onStarted }) {
           <li><b>Hosts, websites and session times</b> found online and sent to the right families</li>
           <li><b>Messages and announcements</b> in one place instead of group texts</li>
         </ul>
-        <Field label="Gym or club name"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Apex Gymnastics" /></Field>
+        <Field label="Team, gym or club name"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Apex Gymnastics" /></Field>
         <Button className="wide" disabled={busy || name.trim().length < 2} onClick={async () => { setBusy(true); setErr(null); try { await api("club/trial", { clubName: name }); onStarted(); } catch (e) { setErr(e); setBusy(false); } }}>{busy ? "Setting up…" : "Start my gym — no card needed"}</Button>
         <ErrorNote error={err} />
         <button className="link center" onClick={() => setPay(true)}>Skip the trial and choose a plan</button>
